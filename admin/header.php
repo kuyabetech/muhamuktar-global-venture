@@ -572,7 +572,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
 <!-- Admin Sidebar -->
 <aside class="admin-sidebar" id="adminSidebar">
     <div class="sidebar-header">
-        <a href="<?= BASE_URL ?>admin/dashboard.php" class="admin-logo">
+        <a href="<?= BASE_URL ?>admin/index.php" class="admin-logo">
             <i class="fas fa-crown"></i>
             <?= htmlspecialchars(SITE_NAME ?? 'Admin') ?>
         </a>
@@ -581,7 +581,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <nav class="sidebar-nav">
         <div class="nav-section">
             <div class="section-title">Dashboard</div>
-            <a href="<?= BASE_URL ?>admin/dashboard.php" class="nav-item <?= $current_page === 'dashboard.php' ? 'active' : '' ?>">
+            <a href="<?= BASE_URL ?>admin/index.php" class="nav-item <?= $current_page === 'dashboard.php' ? 'active' : '' ?>">
                 <i class="fas fa-chart-line"></i>
                 <span>Overview</span>
             </a>

@@ -689,7 +689,7 @@
                 <div class="dropdown-divider"></div>
                 <div class="dropdown-section-title">Admin Panel</div>
                 
-                <a href="<?= BASE_URL ?>admin/dashboard.php" class="dropdown-link">
+                <a href="<?= BASE_URL ?>admin/index.php" class="dropdown-link">
                   <i class="fas fa-chart-line"></i>
                   <span>Dashboard</span>
                 </a>
@@ -811,7 +811,7 @@
         <div class="dropdown-divider" style="margin: var(--space-lg) 0;"></div>
         <div class="dropdown-section-title">Admin</div>
         
-        <a href="<?= BASE_URL ?>admin/dashboard.php" class="mobile-nav-link">
+        <a href="<?= BASE_URL ?>admin/index.php" class="mobile-nav-link">
           <i class="fas fa-chart-line"></i>
           <span>Dashboard</span>
         </a>
