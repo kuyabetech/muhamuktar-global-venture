@@ -1,6 +1,107 @@
 <?php
 // includes/header.php
 // Requires: is_logged_in(), is_admin(), BASE_URL, SITE_NAME, $_SESSION['user_name'] / 'user_email'
+
+// Fetch site settings
+try {
+    // Get site name from settings
+    $stmt = $pdo->prepare("SELECT value FROM settings WHERE `key` = 'site_name'");
+    $stmt->execute();
+    $site_name = $stmt->fetchColumn();
+    if (!$site_name) {
+        $site_name = SITE_NAME ?? 'Muhamuktar Global Venture';
+    }
+    
+    // Get currency settings
+    $stmt = $pdo->prepare("SELECT value FROM settings WHERE `key` = 'currency'");
+    $stmt->execute();
+    $currency_setting = $stmt->fetchColumn();
+    if ($currency_setting) {
+        // Parse currency (e.g., "₦ NGN" or "$ USD")
+        $currency_parts = explode(' ', $currency_setting);
+        $currency_symbol = $currency_parts[0] ?? '₦';
+        $currency_code = $currency_parts[1] ?? 'NGN';
+    } else {
+        $currency_symbol = '₦';
+        $currency_code = 'NGN';
+    }
+} catch (Exception $e) {
+    $site_name = SITE_NAME ?? 'Muhamuktar Global Venture';
+    $currency_symbol = '₦';
+    $currency_code = 'NGN';
+}
+
+// Get dynamic counts
+$cart_count = 0;
+$wishlist_count = 0;
+$notification_count = 0;
+$orders_count = 0;
+
+if (function_exists('is_logged_in') && is_logged_in()) {
+    $user_id = $_SESSION['user_id'] ?? 0;
+    
+    try {
+        // Check if cart table exists
+        $stmt = $pdo->query("SHOW TABLES LIKE 'cart'");
+        if ($stmt->rowCount() > 0) {
+            // Get cart count
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM cart WHERE user_id = ?");
+            $stmt->execute([$user_id]);
+            $cart_count = $stmt->fetchColumn();
+            $_SESSION['cart_count'] = $cart_count;
+        }
+        
+        // Check if wishlist table exists
+        $stmt = $pdo->query("SHOW TABLES LIKE 'wishlist'");
+        if ($stmt->rowCount() > 0) {
+            // Get wishlist count
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM wishlist WHERE user_id = ?");
+            $stmt->execute([$user_id]);
+            $wishlist_count = $stmt->fetchColumn();
+            $_SESSION['wishlist_count'] = $wishlist_count;
+        }
+        
+        // Check if orders table exists
+        $stmt = $pdo->query("SHOW TABLES LIKE 'orders'");
+        if ($stmt->rowCount() > 0) {
+            // Get orders count
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM orders WHERE user_id = ?");
+            $stmt->execute([$user_id]);
+            $orders_count = $stmt->fetchColumn();
+            $_SESSION['orders_count'] = $orders_count;
+        }
+        
+        // Check if notifications table exists
+        $stmt = $pdo->query("SHOW TABLES LIKE 'notifications'");
+        if ($stmt->rowCount() > 0) {
+            // Get unread notifications count
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+            $stmt->execute([$user_id]);
+            $notification_count = $stmt->fetchColumn();
+        } else {
+            $notification_count = 3; // Demo value
+        }
+        
+    } catch (Exception $e) {
+        // Tables might not exist yet, use session values as fallback
+        $cart_count = $_SESSION['cart_count'] ?? 0;
+        $wishlist_count = $_SESSION['wishlist_count'] ?? 0;
+        $orders_count = $_SESSION['orders_count'] ?? 0;
+        $notification_count = 3; // Default demo value
+    }
+}
+
+// Get announcement text
+try {
+    $stmt = $pdo->prepare("SELECT value FROM settings WHERE `key` = 'announcement_text'");
+    $stmt->execute();
+    $announcement = $stmt->fetchColumn();
+    if (!$announcement) {
+        $announcement = "🚚 Free shipping on orders over ₦50,000 • <strong>WELCOME25</strong> for 10% off your first order!";
+    }
+} catch (Exception $e) {
+    $announcement = "🚚 Free shipping on orders over ₦50,000 • <strong>WELCOME25</strong> for 10% off your first order!";
+}
 ?>
 
 <!DOCTYPE html>
@@ -8,7 +109,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?= htmlspecialchars($page_title ?? SITE_NAME ?? 'Muhamuktar Global Venture') ?> | Premium Marketplace</title>
+  <title><?= htmlspecialchars($page_title ?? $site_name) ?> | Premium Marketplace</title>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 
@@ -195,19 +296,22 @@
 
     .badge {
       position:absolute;
-      top:0;
-      right:0;
-      background:var(--danger);
-      color:white;
-      font-size:0.65rem;
-      min-width:18px;
-      height:18px;
-      border-radius:50%;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      font-weight:var(--fw-bold);
+      top: -5px;
+      right: -5px;
+      background: var(--danger);
+      color: white;
+      font-size: 0.7rem;
+      min-width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      display: flex !important;
+      align-items: center;
+      justify-content: center;
+      font-weight: var(--fw-bold);
       border: 2px solid var(--white);
+      padding: 0 4px;
+      line-height: 1;
+      z-index: 10;
     }
 
     /* User Dropdown */
@@ -314,6 +418,16 @@
       color: var(--text-lighter);
       text-transform: uppercase;
       letter-spacing: 0.5px;
+    }
+
+    .count-badge {
+      margin-left: auto;
+      background: var(--primary);
+      color: white;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 0.8rem;
+      font-weight: var(--fw-bold);
     }
 
     /* Currency & Theme */
@@ -601,7 +715,7 @@
 <!-- Top announcement bar -->
 <div class="top-announcement">
   <div class="container">
-    🚚 Free shipping on orders over ₦50,000 • <strong>WELCOME25</strong> for 10% off your first order!
+    <?= $announcement ?>
   </div>
 </div>
 
@@ -612,7 +726,7 @@
       <!-- Logo -->
       <a href="<?= BASE_URL ?>" class="logo">
         <i class="fas fa-shopping-bag"></i>
-        <?= htmlspecialchars(SITE_NAME ?? 'Muhamuktar') ?>
+        <?= htmlspecialchars($site_name) ?>
       </a>
 
       <!-- Search Form (Desktop) -->
@@ -623,9 +737,10 @@
 
       <!-- Currency Selector (Desktop) -->
       <div class="currency-selector">
-        <button class="currency-btn" title="Change currency">
+        <button class="currency-btn" title="Change currency" id="currency-btn">
           <i class="fas fa-money-bill-wave"></i>
-          ₦ NGN <i class="fas fa-chevron-down" style="font-size:0.8rem;"></i>
+          <span id="current-currency"><?= $currency_symbol ?> <?= $currency_code ?></span>
+          <i class="fas fa-chevron-down" style="font-size:0.8rem;"></i>
         </button>
       </div>
 
@@ -642,13 +757,25 @@
           <!-- Notifications -->
           <button class="action-btn" title="Notifications" id="notifications-btn">
             <i class="far fa-bell"></i>
-            <span class="badge" id="notif-count">3</span>
+            <?php if ($notification_count > 0): ?>
+              <span class="badge" id="notif-count"><?= $notification_count ?></span>
+            <?php endif; ?>
           </button>
 
           <!-- Cart -->
           <a href="<?= BASE_URL ?>pages/cart.php" class="action-btn" title="Cart">
             <i class="fas fa-shopping-cart"></i>
-            <span class="badge" id="cart-count"><?= $_SESSION['cart_count'] ?? 0 ?></span>
+            <?php if ($cart_count > 0): ?>
+              <span class="badge" id="cart-count"><?= $cart_count ?></span>
+            <?php endif; ?>
+          </a>
+
+          <!-- Wishlist -->
+          <a href="<?= BASE_URL ?>pages/wishlist.php" class="action-btn" title="Wishlist">
+            <i class="fas fa-heart"></i>
+            <?php if ($wishlist_count > 0): ?>
+              <span class="badge" id="wishlist-count"><?= $wishlist_count ?></span>
+            <?php endif; ?>
           </a>
 
           <!-- User Dropdown -->
@@ -672,17 +799,22 @@
               <a href="<?= BASE_URL ?>pages/orders.php" class="dropdown-link">
                 <i class="fas fa-shopping-bag"></i>
                 <span>My Orders</span>
+                <?php if ($orders_count > 0): ?>
+                  <span class="count-badge"><?= $orders_count ?></span>
+                <?php endif; ?>
               </a>
 
               <a href="<?= BASE_URL ?>pages/wishlist.php" class="dropdown-link">
                 <i class="fas fa-heart"></i>
                 <span>Wishlist</span>
-                <span style="margin-left: auto; background: var(--primary); color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem;">12</span>
+                <?php if ($wishlist_count > 0): ?>
+                  <span class="count-badge" id="wishlist-count-dropdown"><?= $wishlist_count ?></span>
+                <?php endif; ?>
               </a>
 
               <a href="<?= BASE_URL ?>pages/settings.php" class="dropdown-link">
                 <i class="fas fa-cog"></i>
-                <span>Settings</span>
+                <span>Account Settings</span>
               </a>
 
               <?php if (function_exists('is_admin') && is_admin()): ?>
@@ -707,6 +839,11 @@
                 <a href="<?= BASE_URL ?>admin/users.php" class="dropdown-link">
                   <i class="fas fa-users"></i>
                   <span>Manage Users</span>
+                </a>
+
+                <a href="<?= BASE_URL ?>admin/settings.php" class="dropdown-link">
+                  <i class="fas fa-cog"></i>
+                  <span>Site Settings</span>
                 </a>
               <?php endif; ?>
 
@@ -741,7 +878,7 @@
   <div class="mobile-nav-header">
     <a href="<?= BASE_URL ?>" class="mobile-nav-logo">
       <i class="fas fa-shopping-bag"></i>
-      <?= htmlspecialchars(SITE_NAME ?? 'Muhamuktar') ?>
+      <?= htmlspecialchars($site_name) ?>
     </a>
     <button class="mobile-close-btn" id="mobile-close-btn">
       <i class="fas fa-times"></i>
@@ -792,19 +929,30 @@
       <a href="<?= BASE_URL ?>pages/orders.php" class="mobile-nav-link">
         <i class="fas fa-shopping-bag"></i>
         <span>Orders</span>
-        <span id="mobile-orders-count" style="margin-left: auto; background: var(--primary); color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem;">5</span>
+        <?php if ($orders_count > 0): ?>
+          <span style="margin-left: auto; background: var(--primary); color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem;" id="mobile-orders-count"><?= $orders_count ?></span>
+        <?php endif; ?>
       </a>
 
       <a href="<?= BASE_URL ?>pages/cart.php" class="mobile-nav-link">
         <i class="fas fa-shopping-cart"></i>
         <span>Cart</span>
-        <span id="mobile-cart-count" style="margin-left: auto; background: var(--danger); color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem;"><?= $_SESSION['cart_count'] ?? 0 ?></span>
+        <?php if ($cart_count > 0): ?>
+          <span style="margin-left: auto; background: var(--danger); color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem;" id="mobile-cart-count"><?= $cart_count ?></span>
+        <?php endif; ?>
       </a>
 
       <a href="<?= BASE_URL ?>pages/wishlist.php" class="mobile-nav-link">
         <i class="fas fa-heart"></i>
         <span>Wishlist</span>
-        <span style="margin-left: auto; background: var(--primary); color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem;">12</span>
+        <?php if ($wishlist_count > 0): ?>
+          <span style="margin-left: auto; background: var(--primary); color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem;"><?= $wishlist_count ?></span>
+        <?php endif; ?>
+      </a>
+
+      <a href="<?= BASE_URL ?>pages/settings.php" class="mobile-nav-link">
+        <i class="fas fa-cog"></i>
+        <span>Settings</span>
       </a>
 
       <?php if (function_exists('is_admin') && is_admin()): ?>
@@ -819,6 +967,16 @@
         <a href="<?= BASE_URL ?>admin/products.php" class="mobile-nav-link">
           <i class="fas fa-box"></i>
           <span>Products</span>
+        </a>
+
+        <a href="<?= BASE_URL ?>admin/orders.php" class="mobile-nav-link">
+          <i class="fas fa-clipboard-list"></i>
+          <span>Orders</span>
+        </a>
+
+        <a href="<?= BASE_URL ?>admin/users.php" class="mobile-nav-link">
+          <i class="fas fa-users"></i>
+          <span>Users</span>
         </a>
       <?php endif; ?>
 
@@ -845,20 +1003,60 @@
       <button class="action-btn" style="flex: 1;" onclick="toggleTheme()">
         <i class="fas fa-moon"></i> Theme
       </button>
-      <button class="currency-btn" style="flex: 1;">
-        <i class="fas fa-money-bill-wave"></i> ₦ NGN
+      <button class="currency-btn" style="flex: 1;" onclick="showCurrencySelector()">
+        <i class="fas fa-money-bill-wave"></i> <span id="mobile-current-currency"><?= $currency_symbol ?> <?= $currency_code ?></span>
       </button>
     </div>
   </div>
 </div>
 
 <!-- Overlay -->
-<!-- Overlay -->
 <div class="overlay" id="overlay"></div>
 
+<!-- Currency Selector Modal -->
+<div class="currency-modal" id="currencyModal" style="display: none;">
+  <div class="currency-modal-content">
+    <div class="currency-modal-header">
+      <h3>Select Currency</h3>
+      <button class="currency-modal-close" onclick="closeCurrencyModal()">&times;</button>
+    </div>
+    <div class="currency-list">
+      <div class="currency-option" onclick="setCurrency('NGN', '₦')">
+        <span class="currency-symbol">₦</span>
+        <span class="currency-name">Nigerian Naira (NGN)</span>
+        <span class="currency-check" id="check-NGN">✓</span>
+      </div>
+      <div class="currency-option" onclick="setCurrency('USD', '$')">
+        <span class="currency-symbol">$</span>
+        <span class="currency-name">US Dollar (USD)</span>
+        <span class="currency-check" id="check-USD"></span>
+      </div>
+      <div class="currency-option" onclick="setCurrency('EUR', '€')">
+        <span class="currency-symbol">€</span>
+        <span class="currency-name">Euro (EUR)</span>
+        <span class="currency-check" id="check-EUR"></span>
+      </div>
+      <div class="currency-option" onclick="setCurrency('GBP', '£')">
+        <span class="currency-symbol">£</span>
+        <span class="currency-name">British Pound (GBP)</span>
+        <span class="currency-check" id="check-GBP"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
-// Debug logging
-console.log('Header script loading...');
+// Pass PHP variables to JavaScript
+const siteConfig = {
+    cartCount: <?= json_encode($cart_count) ?>,
+    wishlistCount: <?= json_encode($wishlist_count) ?>,
+    ordersCount: <?= json_encode($orders_count) ?>,
+    notificationCount: <?= json_encode($notification_count) ?>,
+    currencySymbol: '<?= $currency_symbol ?>',
+    currencyCode: '<?= $currency_code ?>'
+};
+
+console.log('Header script loading...', siteConfig);
 
 // ====================
 // DOM Ready Function
@@ -872,7 +1070,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const themeToggle = document.getElementById('theme-toggle');
     console.log('Theme toggle element:', themeToggle);
     
-    function toggleTheme() {
+    window.toggleTheme = function() {
         console.log('toggleTheme called');
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         const newTheme = isDark ? 'light' : 'dark';
@@ -899,7 +1097,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         console.log('Theme changed to:', newTheme);
-    }
+    };
     
     // Initialize theme
     function initTheme() {
@@ -1067,14 +1265,74 @@ document.addEventListener('DOMContentLoaded', function() {
     const currencyBtns = document.querySelectorAll('.currency-btn');
     console.log('Currency buttons found:', currencyBtns.length);
     
+    window.showCurrencySelector = function() {
+        document.getElementById('currencyModal').style.display = 'flex';
+        loadSavedCurrency();
+    };
+    
+    window.closeCurrencyModal = function() {
+        document.getElementById('currencyModal').style.display = 'none';
+    };
+    
+    window.setCurrency = function(code, symbol) {
+        console.log('Setting currency to:', code);
+        
+        // Update displayed currency
+        document.querySelectorAll('#current-currency, #mobile-current-currency').forEach(el => {
+            if (el) el.textContent = symbol + ' ' + code;
+        });
+        
+        // Update checkmarks
+        document.querySelectorAll('.currency-check').forEach(el => {
+            el.textContent = '';
+        });
+        document.getElementById('check-' + code).textContent = '✓';
+        
+        // Save to localStorage
+        localStorage.setItem('currency', JSON.stringify({code: code, symbol: symbol}));
+        
+        // Close modal
+        closeCurrencyModal();
+        
+        // Trigger currency change event
+        window.dispatchEvent(new CustomEvent('currencyChanged', {detail: {code: code, symbol: symbol}}));
+    };
+    
+    function loadSavedCurrency() {
+        const saved = localStorage.getItem('currency');
+        if (saved) {
+            try {
+                const currency = JSON.parse(saved);
+                document.querySelectorAll('#current-currency, #mobile-current-currency').forEach(el => {
+                    if (el) el.textContent = currency.symbol + ' ' + currency.code;
+                });
+                document.querySelectorAll('.currency-check').forEach(el => {
+                    el.textContent = '';
+                });
+                const checkEl = document.getElementById('check-' + currency.code);
+                if (checkEl) checkEl.textContent = '✓';
+            } catch (e) {
+                console.error('Error loading currency:', e);
+            }
+        } else {
+            // Default to saved from PHP
+            document.getElementById('check-<?= $currency_code ?>').textContent = '✓';
+        }
+    }
+    
     currencyBtns.forEach(btn => {
         btn.addEventListener('click', function(e) {
             e.preventDefault();
-            console.log('Currency button clicked');
-            // In a real app, you would show a currency selection modal here
-            // For now, just show a simple alert
-            alert('Currency Selection\n\nAvailable currencies:\n• ₦ NGN (Naira)\n• $ USD (US Dollar)\n• € EUR (Euro)\n• £ GBP (British Pound)\n\nIn a real application, this would open a modal for currency selection.');
+            showCurrencySelector();
         });
+    });
+    
+    // Close modal when clicking outside
+    window.addEventListener('click', function(e) {
+        const modal = document.getElementById('currencyModal');
+        if (e.target === modal) {
+            closeCurrencyModal();
+        }
     });
     
     // ====================
@@ -1106,25 +1364,37 @@ document.addEventListener('DOMContentLoaded', function() {
     // ====================
     // 6. CART & NOTIFICATION COUNTS
     // ====================
-    function updateCartCount(count) {
+    window.updateCartCount = function(count) {
         console.log('Updating cart count to:', count);
         
-        const cartCountElements = document.querySelectorAll('#cart-count, #mobile-cart-count');
+        const cartCountElements = document.querySelectorAll('#cart-count');
         cartCountElements.forEach(element => {
-            element.textContent = count;
-            // Show/hide badge based on count
-            if (parseInt(count) > 0) {
-                element.style.display = 'flex';
-            } else {
-                element.style.display = 'none';
+            if (element) {
+                element.textContent = count;
+                if (parseInt(count) > 0) {
+                    element.style.display = 'flex';
+                } else {
+                    element.style.display = 'none';
+                }
             }
         });
         
+        // Update mobile cart count
+        const mobileCartCount = document.getElementById('mobile-cart-count');
+        if (mobileCartCount) {
+            mobileCartCount.textContent = count;
+            if (parseInt(count) > 0) {
+                mobileCartCount.style.display = 'inline-block';
+            } else {
+                mobileCartCount.style.display = 'none';
+            }
+        }
+        
         // Also update in localStorage for persistence
         localStorage.setItem('cartCount', count);
-    }
+    };
     
-    function updateNotificationCount(count) {
+    window.updateNotificationCount = function(count) {
         console.log('Updating notification count to:', count);
         
         const notifElement = document.getElementById('notif-count');
@@ -1138,37 +1408,42 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         localStorage.setItem('notifCount', count);
-    }
+    };
     
-    function updateOrdersCount(count) {
-        console.log('Updating orders count to:', count);
+    window.updateWishlistCount = function(count) {
+        console.log('Updating wishlist count to:', count);
         
-        const ordersElement = document.getElementById('mobile-orders-count');
-        if (ordersElement) {
-            ordersElement.textContent = count;
-        }
-    }
+        const wishlistElements = document.querySelectorAll('#wishlist-count, #wishlist-count-dropdown');
+        wishlistElements.forEach(element => {
+            if (element) {
+                element.textContent = count;
+                if (element.id === 'wishlist-count') {
+                    if (parseInt(count) > 0) {
+                        element.style.display = 'flex';
+                    } else {
+                        element.style.display = 'none';
+                    }
+                }
+            }
+        });
+        
+        localStorage.setItem('wishlistCount', count);
+    };
     
-    // Initialize counts from localStorage or session
+    // Initialize counts
     function initCounts() {
         console.log('Initializing counts...');
         
-        // Get cart count from localStorage or session
-        let cartCount = <?= json_encode($_SESSION['cart_count'] ?? 0) ?>;
-        const savedCartCount = localStorage.getItem('cartCount');
-        if (savedCartCount !== null) {
-            cartCount = parseInt(savedCartCount);
-        }
-        updateCartCount(cartCount);
+        // Use PHP values
+        updateCartCount(<?= $cart_count ?>);
+        updateNotificationCount(<?= $notification_count ?>);
+        updateWishlistCount(<?= $wishlist_count ?>);
         
-        // Get notification count
-        let notifCount = localStorage.getItem('notifCount') || 3;
-        updateNotificationCount(notifCount);
-        
-        // Get orders count (example)
-        updateOrdersCount(5);
-        
-        console.log('Counts initialized:', { cartCount, notifCount });
+        console.log('Counts initialized:', { 
+            cartCount: <?= $cart_count ?>, 
+            notifCount: <?= $notification_count ?>, 
+            wishlistCount: <?= $wishlist_count ?> 
+        });
     }
     
     // ====================
@@ -1189,76 +1464,30 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // ====================
-    // 8. DEMO FUNCTIONALITY
-    // ====================
-    // Add demo buttons for testing (remove in production)
-    function addDemoControls() {
-        console.log('Adding demo controls');
-        
-        // Only add in development environment
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-            const demoControls = document.createElement('div');
-            demoControls.style.cssText = `
-                position: fixed;
-                bottom: 20px;
-                right: 20px;
-                background: var(--white);
-                border: 1px solid var(--border);
-                border-radius: var(--radius);
-                padding: var(--space-sm);
-                z-index: 9999;
-                box-shadow: var(--shadow-lg);
-                font-size: 12px;
-                display: none; /* Hidden by default */
-            `;
-            
-            demoControls.innerHTML = `
-                <div style="margin-bottom: var(--space-xs); font-weight: bold;">Debug Controls</div>
-                <button onclick="window.dispatchEvent(new CustomEvent('cartUpdate', {detail: {count: 5}}))" 
-                        style="margin: 2px; padding: 4px 8px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer;">
-                    Cart: 5
-                </button>
-                <button onclick="window.dispatchEvent(new CustomEvent('notificationUpdate', {detail: {count: 2}}))" 
-                        style="margin: 2px; padding: 4px 8px; background: var(--warning); color: white; border: none; border-radius: 4px; cursor: pointer;">
-                    Notif: 2
-                </button>
-                <button onclick="toggleTheme()" 
-                        style="margin: 2px; padding: 4px 8px; background: var(--success); color: white; border: none; border-radius: 4px; cursor: pointer;">
-                    Toggle Theme
-                </button>
-            `;
-            
-            document.body.appendChild(demoControls);
-            
-            // Show demo controls when holding Ctrl+Shift+D
-            document.addEventListener('keydown', function(e) {
-                if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-                    demoControls.style.display = demoControls.style.display === 'none' ? 'block' : 'none';
-                }
-            });
+    window.addEventListener('wishlistUpdate', function(e) {
+        console.log('Wishlist update event received:', e.detail);
+        if (e.detail && e.detail.count !== undefined) {
+            updateWishlistCount(e.detail.count);
         }
-    }
+    });
     
     // ====================
-    // 9. INITIALIZATION
+    // 8. INITIALIZATION
     // ====================
     console.log('Starting initialization...');
     
     // Initialize everything
     initTheme();
     initCounts();
-    addDemoControls();
+    loadSavedCurrency();
     
     // Make functions available globally for debugging
     window.toggleTheme = toggleTheme;
-    window.updateCartCount = updateCartCount;
-    window.updateNotificationCount = updateNotificationCount;
     
     console.log('Header initialization complete!');
     
     // ====================
-    // 10. PERFORMANCE OPTIMIZATION
+    // 9. PERFORMANCE OPTIMIZATION
     // ====================
     // Debounce resize events
     let resizeTimeout;
@@ -1273,7 +1502,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // ====================
-    // 11. ACCESSIBILITY
+    // 10. ACCESSIBILITY
     // ====================
     // Add keyboard navigation for dropdowns
     document.addEventListener('keydown', function(e) {
@@ -1349,5 +1578,108 @@ if (document.readyState === 'loading') {
 }
 </script>
 
-<main style="padding:var(--space-2xl) 0; min-height:70vh;">
+<style>
+/* Currency Modal Styles */
+.currency-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.currency-modal-content {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  width: 90%;
+  max-width: 400px;
+  max-height: 80vh;
+  overflow-y: auto;
+  animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalSlideIn {
+  from {
+    transform: translateY(-50px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.currency-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-lg);
+  border-bottom: 1px solid var(--border);
+}
+
+.currency-modal-header h3 {
+  margin: 0;
+  color: var(--text);
+}
+
+.currency-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--text-light);
+  padding: var(--space-xs);
+  border-radius: var(--radius);
+  transition: all var(--transition);
+}
+
+.currency-modal-close:hover {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--primary);
+}
+
+.currency-list {
+  padding: var(--space-sm);
+}
+
+.currency-option {
+  display: flex;
+  align-items: center;
+  padding: var(--space-md) var(--space-lg);
+  cursor: pointer;
+  border-radius: var(--radius);
+  transition: all var(--transition);
+  margin-bottom: 2px;
+}
+
+.currency-option:hover {
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.currency-symbol {
+  font-size: 1.2rem;
+  font-weight: var(--fw-bold);
+  width: 40px;
+  color: var(--primary);
+}
+
+.currency-name {
+  flex: 1;
+  color: var(--text);
+}
+
+.currency-check {
+  color: var(--success);
+  font-weight: var(--fw-bold);
+  font-size: 1.2rem;
+  width: 30px;
+  text-align: right;
+}
+</style>
+
 <main style="padding:var(--space-2xl) 0; min-height:70vh;">

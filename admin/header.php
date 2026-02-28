@@ -319,6 +319,8 @@ $current_page = basename($_SERVER['PHP_SELF']);
             padding: 0.25rem 0.5rem;
             border-radius: 999px;
             font-weight: 600;
+            min-width: 20px;
+            text-align: center;
         }
 
         /* Main Content */
@@ -581,7 +583,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <nav class="sidebar-nav">
         <div class="nav-section">
             <div class="section-title">Dashboard</div>
-            <a href="<?= BASE_URL ?>admin/index.php" class="nav-item <?= $current_page === 'dashboard.php' ? 'active' : '' ?>">
+            <a href="<?= BASE_URL ?>admin/index.php" class="nav-item <?= $current_page === 'index.php' || $current_page === 'dashboard.php' ? 'active' : '' ?>">
                 <i class="fas fa-chart-line"></i>
                 <span>Overview</span>
             </a>
@@ -784,14 +786,12 @@ document.addEventListener('DOMContentLoaded', function() {
             profileDropdown.classList.toggle('active');
         });
 
-        // Close dropdown when clicking outside
         document.addEventListener('click', function(e) {
             if (!profileBtn.contains(e.target) && !profileDropdown.contains(e.target)) {
                 profileDropdown.classList.remove('active');
             }
         });
 
-        // Close on escape key
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
                 profileDropdown.classList.remove('active');
@@ -803,7 +803,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const notificationBtn = document.getElementById('notificationBtn');
     if (notificationBtn) {
         notificationBtn.addEventListener('click', function() {
-            // In a real app, this would show notifications panel
             alert('Notifications panel would open here. This is a demo.');
         });
     }
@@ -811,14 +810,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // Update page title dynamically
     const pageTitle = document.getElementById('pageTitle');
     if (pageTitle) {
-        // You can set this dynamically based on current page
         const titles = {
             'dashboard.php': 'Dashboard Overview',
+            'analytics.php': 'Analytics Dashboard',
             'products.php': 'Manage Products',
             'orders.php': 'Order Management',
             'customers.php': 'Customer Management',
             'categories.php': 'Category Management',
-            // Add more page titles as needed
+            // Add more as needed
         };
         
         const currentPage = '<?= $current_page ?>';
@@ -827,24 +826,39 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Fetch and update dashboard stats
-    async function updateDashboardStats() {
+    // ──────────────────────────────────────────────
+    // DYNAMIC BADGE VALUES (Pending Products & Pending Orders)
+    // ──────────────────────────────────────────────
+    async function updateBadges() {
         try {
-            // Fetch pending orders count
-            const response = await fetch('<?= BASE_URL ?>admin/api/stats.php?type=pending_orders');
+            const response = await fetch('<?= BASE_URL ?>admin/api/sidebar-stats.php');
             const data = await response.json();
-            
+
             if (data.success) {
-                document.getElementById('pending-orders').textContent = data.count;
+                // Pending Products
+                const ppEl = document.getElementById('pending-products');
+                if (ppEl) {
+                    const count = data.pending_products ?? 0;
+                    ppEl.textContent = count;
+                    ppEl.style.display = count > 0 ? 'inline-flex' : 'none';
+                }
+
+                // Pending Orders
+                const poEl = document.getElementById('pending-orders');
+                if (poEl) {
+                    const count = data.pending_orders ?? 0;
+                    poEl.textContent = count;
+                    poEl.style.display = count > 0 ? 'inline-flex' : 'none';
+                }
             }
-        } catch (error) {
-            console.error('Error fetching stats:', error);
+        } catch (err) {
+            console.warn('Badge update failed:', err);
         }
     }
 
-    // Update stats every 30 seconds
-    updateDashboardStats();
-    setInterval(updateDashboardStats, 30000);
+    // Run immediately + every 30 seconds
+    updateBadges();
+    setInterval(updateBadges, 30000);
 
     // Add active class to current page in navigation
     const currentPath = window.location.pathname;
@@ -858,19 +872,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Keyboard shortcuts
     document.addEventListener('keydown', function(e) {
-        // Ctrl + B to toggle sidebar
         if (e.ctrlKey && e.key === 'b') {
             e.preventDefault();
             toggleSidebar();
         }
         
-        // Ctrl + N for notifications
         if (e.ctrlKey && e.key === 'n') {
             e.preventDefault();
             notificationBtn.click();
         }
         
-        // Esc to close dropdowns
         if (e.key === 'Escape') {
             profileDropdown.classList.remove('active');
         }
@@ -892,7 +903,6 @@ document.addEventListener('DOMContentLoaded', function() {
     window.addEventListener('resize', function() {
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(function() {
-            // Auto-close sidebar on resize to desktop if open
             if (window.innerWidth >= 1024 && sidebar.classList.contains('active')) {
                 toggleSidebar();
             }
@@ -904,11 +914,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const pageTitleElement = document.getElementById('pageTitle');
         const pageTitleText = pageTitleElement ? pageTitleElement.textContent : 'Dashboard';
         
-        // Remove existing breadcrumb
         const existingBreadcrumb = document.querySelector('.breadcrumb');
         if (existingBreadcrumb) existingBreadcrumb.remove();
         
-        // Create new breadcrumb
         const breadcrumb = document.createElement('div');
         breadcrumb.className = 'breadcrumb';
         breadcrumb.innerHTML = `
@@ -917,82 +925,63 @@ document.addEventListener('DOMContentLoaded', function() {
             <span>${pageTitleText}</span>
         `;
         
-        // Insert after page title
         if (adminMain && adminMain.firstChild) {
             adminMain.insertBefore(breadcrumb, adminMain.firstChild);
         }
     }
 
-    // Call on page load
     updateBreadcrumb();
+
+    // Toast helper (unchanged)
+    function showToast(message, type = 'success') {
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.innerHTML = `
+            <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+            <span>${message}</span>
+            <button class="toast-close"><i class="fas fa-times"></i></button>
+        `;
+        
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 1rem 1.25rem;
+            border-radius: 0.75rem;
+            box-shadow: var(--admin-shadow-lg);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            z-index: 10000;
+            animation: slideIn 0.3s ease;
+            border-left: 4px solid ${type === 'success' ? 'var(--admin-secondary)' : type === 'error' ? 'var(--admin-danger)' : 'var(--admin-warning)'};
+        `;
+        
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => toast.remove(), 300);
+        }, 5000);
+        
+        toast.querySelector('.toast-close').addEventListener('click', () => {
+            toast.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => toast.remove(), 300);
+        });
+    }
+
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to   { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to   { transform: translateX(100%); opacity: 0; }
+        }
+    `;
+    document.head.appendChild(style);
 });
-
-// Helper function to show toast notifications
-function showToast(message, type = 'success') {
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.innerHTML = `
-        <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
-        <span>${message}</span>
-        <button class="toast-close"><i class="fas fa-times"></i></button>
-    `;
-    
-    // Add styles
-    toast.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: white;
-        padding: 1rem 1.25rem;
-        border-radius: 0.75rem;
-        box-shadow: var(--admin-shadow-lg);
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        z-index: 10000;
-        animation: slideIn 0.3s ease;
-        border-left: 4px solid ${type === 'success' ? 'var(--admin-secondary)' : type === 'error' ? 'var(--admin-danger)' : 'var(--admin-warning)'};
-    `;
-    
-    document.body.appendChild(toast);
-    
-    // Auto remove after 5 seconds
-    setTimeout(() => {
-        toast.style.animation = 'slideOut 0.3s ease';
-        setTimeout(() => toast.remove(), 300);
-    }, 5000);
-    
-    // Close button
-    toast.querySelector('.toast-close').addEventListener('click', () => {
-        toast.style.animation = 'slideOut 0.3s ease';
-        setTimeout(() => toast.remove(), 300);
-    });
-}
-
-// Add CSS animations
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes slideIn {
-        from {
-            transform: translateX(100%);
-            opacity: 0;
-        }
-        to {
-            transform: translateX(0);
-            opacity: 1;
-        }
-    }
-    
-    @keyframes slideOut {
-        from {
-            transform: translateX(0);
-            opacity: 1;
-        }
-        to {
-            transform: translateX(100%);
-            opacity: 0;
-        }
-    }
-`;
-document.head.appendChild(style);
 </script>

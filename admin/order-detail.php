@@ -1180,4 +1180,3 @@ document.documentElement.style.setProperty('--status-color', '<?= $status_color 
     </div>
 </main>
 
-<?php require_once '../includes/footer.php'; ?>
