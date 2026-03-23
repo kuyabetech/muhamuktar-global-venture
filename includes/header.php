@@ -31,6 +31,20 @@ try {
     $currency_code = 'NGN';
 }
 
+// Fetch categories for mega menu
+try {
+    $menuStmt = $pdo->query("
+        SELECT id, name, slug, icon 
+        FROM categories 
+        WHERE status = 'active' AND parent_id IS NULL
+        ORDER BY display_order, name 
+        LIMIT 10
+    ");
+    $menu_categories = $menuStmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    $menu_categories = [];
+}
+
 // Get dynamic counts
 $cart_count = 0;
 $wishlist_count = 0;
@@ -171,7 +185,7 @@ try {
 
     .container { max-width:1320px; margin:0 auto; padding:0 var(--space-lg); }
 
-    /* Top Announcement */
+    /* Top announcement */
     .top-announcement {
       background: linear-gradient(90deg, var(--primary), var(--primary-light));
       color:white;
@@ -181,21 +195,6 @@ try {
       font-weight:var(--fw-medium);
       position: relative;
       overflow: hidden;
-    }
-
-    .top-announcement::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-      animation: shimmer 3s infinite;
-    }
-
-    @keyframes shimmer {
-      100% { left: 100%; }
     }
 
     /* Header */
@@ -552,6 +551,10 @@ try {
       border-bottom: 1px solid var(--border);
     }
 
+    .mobile-search form {
+      position: relative;
+    }
+
     .mobile-search-input {
       width: 100%;
       padding: var(--space-md) var(--space-md) var(--space-md) var(--space-2xl);
@@ -559,11 +562,12 @@ try {
       border-radius: var(--radius);
       font-size: var(--fs-base);
       background: var(--bg);
+      color: var(--text);
     }
 
     .mobile-search-icon {
       position: absolute;
-      left: calc(var(--space-lg) + var(--space-md));
+      left: var(--space-md);
       top: 50%;
       transform: translateY(-50%);
       color: var(--text-lighter);
@@ -613,45 +617,6 @@ try {
       margin-top: var(--space-md);
     }
 
-    /* Responsive Design */
-    @media (min-width: 993px) {
-      .menu-toggle { display: none; }
-      .mobile-nav { display: none; }
-      .overlay { display: none; }
-    }
-
-    @media (max-width: 992px) {
-      .search-form,
-      .header-actions,
-      .theme-toggle-wrapper,
-      .currency-selector {
-        display: none !important;
-      }
-
-      .menu-toggle {
-        display: block;
-      }
-
-      .header-inner {
-        padding: var(--space-md) 0;
-      }
-
-      .logo {
-        font-size: 1.5rem;
-      }
-
-      .logo i {
-        font-size: 1.6rem;
-      }
-    }
-
-    @media (min-width: 768px) and (max-width: 992px) {
-      .search-form {
-        max-width: 350px;
-        margin: 0 var(--space-md);
-      }
-    }
-
     /* Join Now Button */
     .join-btn {
       background: linear-gradient(135deg, var(--primary), var(--primary-light));
@@ -672,7 +637,6 @@ try {
       box-shadow: 0 6px 20px rgba(59, 130, 246, 0.3);
     }
 
-    /* Mobile Join Button */
     .mobile-join-btn {
       display: block;
       width: 100%;
@@ -691,28 +655,210 @@ try {
       background: linear-gradient(135deg, var(--primary-dark), var(--primary));
     }
 
-    /* Scrollbar Styling */
-    ::-webkit-scrollbar {
-      width: 8px;
+    /* Mega Menu */
+    .mega-menu {
+      background: var(--white);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 80px;
+      z-index: 999;
     }
 
-    ::-webkit-scrollbar-track {
-      background: var(--bg);
+    .menu-container {
+      display: flex;
+      align-items: center;
+      height: 45px;
     }
 
-    ::-webkit-scrollbar-thumb {
-      background: var(--border);
-      border-radius: 4px;
+    .all-categories {
+      background: var(--primary);
+      color: white;
+      padding: 0 20px;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      width: 200px;
+      font-size: 14px;
     }
 
-    ::-webkit-scrollbar-thumb:hover {
-      background: var(--text-light);
+    .all-categories i:first-child {
+      font-size: 16px;
+    }
+
+    .all-categories i:last-child {
+      margin-left: auto;
+      font-size: 12px;
+    }
+
+    .menu-links {
+      display: flex;
+      gap: 25px;
+      margin-left: 30px;
+      flex: 1;
+    }
+
+    .menu-links a {
+      color: var(--text);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: color var(--transition);
+    }
+
+    .menu-links a:hover {
+      color: var(--primary);
+    }
+
+    /* Currency Modal */
+    .currency-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+    }
+
+    .currency-modal-content {
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      width: 90%;
+      max-width: 400px;
+      max-height: 80vh;
+      overflow-y: auto;
+      animation: modalSlideIn 0.3s ease;
+    }
+
+    @keyframes modalSlideIn {
+      from {
+        transform: translateY(-50px);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    .currency-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: var(--space-lg);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .currency-modal-header h3 {
+      margin: 0;
+      color: var(--text);
+    }
+
+    .currency-modal-close {
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      color: var(--text-light);
+      padding: var(--space-xs);
+      border-radius: var(--radius);
+      transition: all var(--transition);
+    }
+
+    .currency-modal-close:hover {
+      background: rgba(59, 130, 246, 0.1);
+      color: var(--primary);
+    }
+
+    .currency-list {
+      padding: var(--space-sm);
+    }
+
+    .currency-option {
+      display: flex;
+      align-items: center;
+      padding: var(--space-md) var(--space-lg);
+      cursor: pointer;
+      border-radius: var(--radius);
+      transition: all var(--transition);
+      margin-bottom: 2px;
+    }
+
+    .currency-option:hover {
+      background: rgba(59, 130, 246, 0.08);
+    }
+
+    .currency-symbol {
+      font-size: 1.2rem;
+      font-weight: var(--fw-bold);
+      width: 40px;
+      color: var(--primary);
+    }
+
+    .currency-name {
+      flex: 1;
+      color: var(--text);
+    }
+
+    .currency-check {
+      color: var(--success);
+      font-weight: var(--fw-bold);
+      font-size: 1.2rem;
+      width: 30px;
+      text-align: right;
+    }
+
+    /* Responsive */
+    @media (min-width: 993px) {
+      .menu-toggle { display: none; }
+      .mobile-nav { display: none; }
+      .overlay { display: none; }
+    }
+
+    @media (max-width: 992px) {
+      .search-form,
+      .header-actions,
+      .theme-toggle-wrapper,
+      .currency-selector,
+      .mega-menu {
+        display: none !important;
+      }
+
+      .menu-toggle {
+        display: block;
+      }
+
+      .header-inner {
+        padding: var(--space-md) 0;
+      }
+
+      .logo {
+        font-size: 1.5rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .logo span {
+        display: none;
+      }
+    }
+
+    main {
+      padding: var(--space-2xl) 0;
+      min-height: 70vh;
     }
   </style>
 </head>
 <body>
 
-<!-- Top announcement bar -->
+<!-- Top announcement bar (YOUR COLORS - primary gradient) -->
 <div class="top-announcement">
   <div class="container">
     <?= $announcement ?>
@@ -723,19 +869,19 @@ try {
   <div class="container">
     <div class="header-inner">
 
-      <!-- Logo -->
+      <!-- Logo (YOUR COLORS - primary) -->
       <a href="<?= BASE_URL ?>" class="logo">
         <i class="fas fa-shopping-bag"></i>
-        <?= htmlspecialchars($site_name) ?>
+        <span><?= htmlspecialchars($site_name) ?></span>
       </a>
 
       <!-- Search Form (Desktop) -->
       <form class="search-form" action="<?= BASE_URL ?>pages/products.php" method="get">
         <i class="fas fa-search search-icon"></i>
-        <input type="search" name="q" placeholder="Search products, brands, categories..." aria-label="Search" autocomplete="off">
+        <input type="search" name="q" placeholder="Search products, brands, categories..." value="<?= htmlspecialchars($_GET['q'] ?? '') ?>" autocomplete="off">
       </form>
 
-      <!-- Currency Selector (Desktop) -->
+      <!-- Currency Selector (Desktop) - YOUR COLORS -->
       <div class="currency-selector">
         <button class="currency-btn" title="Change currency" id="currency-btn">
           <i class="fas fa-money-bill-wave"></i>
@@ -751,16 +897,16 @@ try {
         </button>
       </div>
 
-      <!-- Header Actions (Desktop) -->
+      <!-- Header Actions (Desktop) - YOUR COLORS -->
       <div class="header-actions">
         <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
           <!-- Notifications -->
-          <button class="action-btn" title="Notifications" id="notifications-btn">
+          <a href="<?= BASE_URL ?>pages/notifications.php" class="action-btn" title="Notifications">
             <i class="far fa-bell"></i>
             <?php if ($notification_count > 0): ?>
               <span class="badge" id="notif-count"><?= $notification_count ?></span>
             <?php endif; ?>
-          </button>
+          </a>
 
           <!-- Cart -->
           <a href="<?= BASE_URL ?>pages/cart.php" class="action-btn" title="Cart">
@@ -856,7 +1002,7 @@ try {
           </div>
 
         <?php else: ?>
-          <!-- Guest User Actions -->
+          <!-- Guest User Actions - YOUR COLORS -->
           <a href="<?= BASE_URL ?>login.php" class="action-btn" title="Sign In">
             <i class="fas fa-sign-in-alt"></i>
           </a>
@@ -873,7 +1019,26 @@ try {
   </div>
 </header>
 
-<!-- Mobile Navigation -->
+<!-- Mega Menu - YOUR COLORS (primary) -->
+<div class="mega-menu">
+  <div class="container">
+    <div class="menu-container">
+      <div class="all-categories">
+        <i class="fas fa-bars"></i> All Categories
+        <i class="fas fa-chevron-down"></i>
+      </div>
+      <div class="menu-links">
+        <a href="<?= BASE_URL ?>pages/products.php?sort=bestseller">Best Sellers</a>
+        <a href="<?= BASE_URL ?>pages/products.php?sort=newest">New Arrivals</a>
+        <a href="<?= BASE_URL ?>pages/products.php?discount_price=1">Flash Deals</a>
+        <a href="<?= BASE_URL ?>pages/products.php?featured=1">Featured</a>
+        <a href="<?= BASE_URL ?>pages/products.php?sort=clearance">Clearance</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Mobile Navigation (YOUR COLORS preserved) -->
 <div class="mobile-nav" id="mobile-nav">
   <div class="mobile-nav-header">
     <a href="<?= BASE_URL ?>" class="mobile-nav-logo">
@@ -887,9 +1052,9 @@ try {
 
   <!-- Mobile Search -->
   <div class="mobile-search">
-    <form action="<?= BASE_URL ?>pages/products.php" method="get" style="position: relative;">
+    <form action="<?= BASE_URL ?>pages/products.php" method="get">
       <i class="fas fa-search mobile-search-icon"></i>
-      <input type="search" name="q" placeholder="Search products..." class="mobile-search-input" autocomplete="off">
+      <input type="search" name="q" placeholder="Search products..." class="mobile-search-input" value="<?= htmlspecialchars($_GET['q'] ?? '') ?>">
     </form>
   </div>
 
@@ -910,7 +1075,7 @@ try {
       <span>Categories</span>
     </a>
 
-    <a href="<?= BASE_URL ?>pages/deals.php" class="mobile-nav-link">
+    <a href="<?= BASE_URL ?>pages/products.php?discount_price=1" class="mobile-nav-link">
       <i class="fas fa-fire"></i>
       <span>Hot Deals</span>
       <span style="margin-left: auto; background: var(--danger); color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem;">SALE</span>
@@ -1000,11 +1165,11 @@ try {
     <?php endif; ?>
     
     <div class="mobile-actions">
-      <button class="action-btn" style="flex: 1;" onclick="toggleTheme()">
-        <i class="fas fa-moon"></i> Theme
-      </button>
       <button class="currency-btn" style="flex: 1;" onclick="showCurrencySelector()">
         <i class="fas fa-money-bill-wave"></i> <span id="mobile-current-currency"><?= $currency_symbol ?> <?= $currency_code ?></span>
+      </button>
+      <button class="action-btn" style="flex: 1; border: 1px solid var(--border);" onclick="toggleTheme()">
+        <i class="fas fa-moon"></i> Theme
       </button>
     </div>
   </div>
@@ -1056,26 +1221,17 @@ const siteConfig = {
     currencyCode: '<?= $currency_code ?>'
 };
 
-console.log('Header script loading...', siteConfig);
-
 // ====================
 // DOM Ready Function
 // ====================
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM fully loaded, initializing header functionality...');
     
     // ====================
     // 1. THEME TOGGLE
     // ====================
-    const themeToggle = document.getElementById('theme-toggle');
-    console.log('Theme toggle element:', themeToggle);
-    
     window.toggleTheme = function() {
-        console.log('toggleTheme called');
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         const newTheme = isDark ? 'light' : 'dark';
-        
-        console.log('Current theme is dark?', isDark, 'Switching to:', newTheme);
         
         document.documentElement.setAttribute('data-theme', newTheme);
         localStorage.setItem('theme', newTheme);
@@ -1083,7 +1239,6 @@ document.addEventListener('DOMContentLoaded', function() {
         // Update desktop theme button icon
         const desktopIcon = document.querySelector('#theme-toggle i');
         if (desktopIcon) {
-            console.log('Updating desktop theme icon');
             desktopIcon.classList.toggle('fa-moon', newTheme === 'light');
             desktopIcon.classList.toggle('fa-sun', newTheme === 'dark');
         }
@@ -1091,32 +1246,25 @@ document.addEventListener('DOMContentLoaded', function() {
         // Update mobile theme button icon
         const mobileIcon = document.querySelector('.mobile-actions .action-btn i');
         if (mobileIcon) {
-            console.log('Updating mobile theme icon');
             mobileIcon.classList.toggle('fa-moon', newTheme === 'light');
             mobileIcon.classList.toggle('fa-sun', newTheme === 'dark');
         }
-        
-        console.log('Theme changed to:', newTheme);
     };
     
     // Initialize theme
     function initTheme() {
-        console.log('Initializing theme...');
         const savedTheme = localStorage.getItem('theme');
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         
         let initialTheme = 'light';
         if (savedTheme) {
             initialTheme = savedTheme;
-            console.log('Using saved theme:', savedTheme);
         } else if (prefersDark) {
             initialTheme = 'dark';
-            console.log('Using system preference: dark');
         }
         
         document.documentElement.setAttribute('data-theme', initialTheme);
         
-        // Set correct icon based on initial theme
         const isDarkInitial = initialTheme === 'dark';
         const desktopIcon = document.querySelector('#theme-toggle i');
         const mobileIcon = document.querySelector('.mobile-actions .action-btn i');
@@ -1130,20 +1278,16 @@ document.addEventListener('DOMContentLoaded', function() {
             mobileIcon.classList.toggle('fa-moon', !isDarkInitial);
             mobileIcon.classList.toggle('fa-sun', isDarkInitial);
         }
-        
-        console.log('Theme initialized to:', initialTheme);
     }
     
     // Attach event listeners for theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
     if (themeToggle) {
-        console.log('Adding click listener to theme toggle');
         themeToggle.addEventListener('click', toggleTheme);
     }
     
-    // Also attach to mobile theme button
     const mobileThemeBtn = document.querySelector('.mobile-actions .action-btn');
     if (mobileThemeBtn) {
-        console.log('Adding click listener to mobile theme button');
         mobileThemeBtn.addEventListener('click', toggleTheme);
     }
     
@@ -1152,18 +1296,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // ====================
     const userToggle = document.getElementById('user-toggle');
     const userDropdown = document.getElementById('user-dropdown');
-    console.log('User dropdown elements:', { userToggle, userDropdown });
     
     if (userToggle && userDropdown) {
-        console.log('Setting up user dropdown');
         
         userToggle.addEventListener('click', function(e) {
-            console.log('User toggle clicked');
             e.preventDefault();
             e.stopPropagation();
-            
-            const isActive = userDropdown.classList.contains('active');
-            console.log('Dropdown is active?', isActive);
             
             // Close all other dropdowns first
             document.querySelectorAll('.dropdown.active').forEach(dropdown => {
@@ -1174,7 +1312,6 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Toggle this dropdown
             userDropdown.classList.toggle('active');
-            console.log('Dropdown toggled. New state:', userDropdown.classList.contains('active'));
         });
         
         // Close dropdown when clicking outside
@@ -1182,7 +1319,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (userDropdown.classList.contains('active') && 
                 !userDropdown.contains(e.target) && 
                 !userToggle.contains(e.target)) {
-                console.log('Click outside dropdown, closing');
                 userDropdown.classList.remove('active');
             }
         });
@@ -1190,7 +1326,6 @@ document.addEventListener('DOMContentLoaded', function() {
         // Close on escape key
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape' && userDropdown.classList.contains('active')) {
-                console.log('Escape pressed, closing dropdown');
                 userDropdown.classList.remove('active');
             }
         });
@@ -1204,31 +1339,19 @@ document.addEventListener('DOMContentLoaded', function() {
     const mobileNav = document.getElementById('mobile-nav');
     const overlay = document.getElementById('overlay');
     
-    console.log('Mobile menu elements:', { 
-        mobileMenuToggle, 
-        mobileCloseBtn, 
-        mobileNav, 
-        overlay 
-    });
-    
     function openMobileMenu() {
-        console.log('Opening mobile menu');
         if (mobileNav) mobileNav.classList.add('active');
         if (overlay) overlay.classList.add('active');
         document.body.style.overflow = 'hidden';
-        console.log('Mobile menu opened');
     }
     
     function closeMobileMenu() {
-        console.log('Closing mobile menu');
         if (mobileNav) mobileNav.classList.remove('active');
         if (overlay) overlay.classList.remove('active');
         document.body.style.overflow = '';
-        console.log('Mobile menu closed');
     }
     
     if (mobileMenuToggle) {
-        console.log('Adding click listener to mobile menu toggle');
         mobileMenuToggle.addEventListener('click', function(e) {
             e.preventDefault();
             openMobileMenu();
@@ -1236,7 +1359,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     if (mobileCloseBtn) {
-        console.log('Adding click listener to mobile close button');
         mobileCloseBtn.addEventListener('click', function(e) {
             e.preventDefault();
             closeMobileMenu();
@@ -1244,7 +1366,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     if (overlay) {
-        console.log('Adding click listener to overlay');
         overlay.addEventListener('click', function(e) {
             e.preventDefault();
             closeMobileMenu();
@@ -1254,16 +1375,25 @@ document.addEventListener('DOMContentLoaded', function() {
     // Close mobile menu on escape key
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape' && mobileNav && mobileNav.classList.contains('active')) {
-            console.log('Escape pressed, closing mobile menu');
             closeMobileMenu();
         }
+    });
+    
+    // Close mobile menu on window resize (if screen becomes large)
+    let resizeTimeout;
+    window.addEventListener('resize', function() {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(function() {
+            if (window.innerWidth > 992 && mobileNav && mobileNav.classList.contains('active')) {
+                closeMobileMenu();
+            }
+        }, 250);
     });
     
     // ====================
     // 4. CURRENCY SELECTOR
     // ====================
     const currencyBtns = document.querySelectorAll('.currency-btn');
-    console.log('Currency buttons found:', currencyBtns.length);
     
     window.showCurrencySelector = function() {
         document.getElementById('currencyModal').style.display = 'flex';
@@ -1275,8 +1405,6 @@ document.addEventListener('DOMContentLoaded', function() {
     };
     
     window.setCurrency = function(code, symbol) {
-        console.log('Setting currency to:', code);
-        
         // Update displayed currency
         document.querySelectorAll('#current-currency, #mobile-current-currency').forEach(el => {
             if (el) el.textContent = symbol + ' ' + code;
@@ -1286,7 +1414,8 @@ document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('.currency-check').forEach(el => {
             el.textContent = '';
         });
-        document.getElementById('check-' + code).textContent = '✓';
+        const checkEl = document.getElementById('check-' + code);
+        if (checkEl) checkEl.textContent = '✓';
         
         // Save to localStorage
         localStorage.setItem('currency', JSON.stringify({code: code, symbol: symbol}));
@@ -1339,24 +1468,17 @@ document.addEventListener('DOMContentLoaded', function() {
     // 5. SEARCH FORM ENHANCEMENT
     // ====================
     const searchForms = document.querySelectorAll('form[action*="products.php"]');
-    console.log('Search forms found:', searchForms.length);
     
     searchForms.forEach(form => {
         form.addEventListener('submit', function(e) {
-            const input = form.querySelector('input[type="search"]');
+            const input = form.querySelector('input[type="search"], input[name="q"]');
             if (input && !input.value.trim()) {
-                console.log('Empty search submitted, preventing form submission');
                 e.preventDefault();
-                input.focus();
                 input.style.borderColor = 'var(--danger)';
-                input.style.boxShadow = '0 0 0 3px rgba(220, 38, 38, 0.1)';
                 
                 setTimeout(() => {
                     input.style.borderColor = '';
-                    input.style.boxShadow = '';
                 }, 2000);
-            } else {
-                console.log('Search submitted with query:', input?.value);
             }
         });
     });
@@ -1365,8 +1487,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // 6. CART & NOTIFICATION COUNTS
     // ====================
     window.updateCartCount = function(count) {
-        console.log('Updating cart count to:', count);
-        
         const cartCountElements = document.querySelectorAll('#cart-count');
         cartCountElements.forEach(element => {
             if (element) {
@@ -1379,7 +1499,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        // Update mobile cart count
         const mobileCartCount = document.getElementById('mobile-cart-count');
         if (mobileCartCount) {
             mobileCartCount.textContent = count;
@@ -1390,13 +1509,10 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         
-        // Also update in localStorage for persistence
         localStorage.setItem('cartCount', count);
     };
     
     window.updateNotificationCount = function(count) {
-        console.log('Updating notification count to:', count);
-        
         const notifElement = document.getElementById('notif-count');
         if (notifElement) {
             notifElement.textContent = count;
@@ -1406,13 +1522,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 notifElement.style.display = 'none';
             }
         }
-        
         localStorage.setItem('notifCount', count);
     };
     
     window.updateWishlistCount = function(count) {
-        console.log('Updating wishlist count to:', count);
-        
         const wishlistElements = document.querySelectorAll('#wishlist-count, #wishlist-count-dropdown');
         wishlistElements.forEach(element => {
             if (element) {
@@ -1426,46 +1539,32 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         });
-        
         localStorage.setItem('wishlistCount', count);
     };
     
     // Initialize counts
     function initCounts() {
-        console.log('Initializing counts...');
-        
-        // Use PHP values
         updateCartCount(<?= $cart_count ?>);
         updateNotificationCount(<?= $notification_count ?>);
         updateWishlistCount(<?= $wishlist_count ?>);
-        
-        console.log('Counts initialized:', { 
-            cartCount: <?= $cart_count ?>, 
-            notifCount: <?= $notification_count ?>, 
-            wishlistCount: <?= $wishlist_count ?> 
-        });
     }
     
     // ====================
-    // 7. EVENT LISTENERS FOR EXTERNAL UPDATES
+    // 7. EVENT LISTENERS
     // ====================
-    // Listen for custom events from other parts of the app
     window.addEventListener('cartUpdate', function(e) {
-        console.log('Cart update event received:', e.detail);
         if (e.detail && e.detail.count !== undefined) {
             updateCartCount(e.detail.count);
         }
     });
     
     window.addEventListener('notificationUpdate', function(e) {
-        console.log('Notification update event received:', e.detail);
         if (e.detail && e.detail.count !== undefined) {
             updateNotificationCount(e.detail.count);
         }
     });
     
     window.addEventListener('wishlistUpdate', function(e) {
-        console.log('Wishlist update event received:', e.detail);
         if (e.detail && e.detail.count !== undefined) {
             updateWishlistCount(e.detail.count);
         }
@@ -1474,59 +1573,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // ====================
     // 8. INITIALIZATION
     // ====================
-    console.log('Starting initialization...');
-    
-    // Initialize everything
     initTheme();
     initCounts();
     loadSavedCurrency();
-    
-    // Make functions available globally for debugging
-    window.toggleTheme = toggleTheme;
-    
-    console.log('Header initialization complete!');
-    
-    // ====================
-    // 9. PERFORMANCE OPTIMIZATION
-    // ====================
-    // Debounce resize events
-    let resizeTimeout;
-    window.addEventListener('resize', function() {
-        clearTimeout(resizeTimeout);
-        resizeTimeout = setTimeout(function() {
-            // Close mobile menu on large screens
-            if (window.innerWidth > 992 && mobileNav && mobileNav.classList.contains('active')) {
-                closeMobileMenu();
-            }
-        }, 250);
-    });
-    
-    // ====================
-    // 10. ACCESSIBILITY
-    // ====================
-    // Add keyboard navigation for dropdowns
-    document.addEventListener('keydown', function(e) {
-        // Tab key navigation for dropdowns
-        if (e.key === 'Tab' && userDropdown && userDropdown.classList.contains('active')) {
-            const focusableElements = userDropdown.querySelectorAll('a, button, input, select, textarea');
-            const firstElement = focusableElements[0];
-            const lastElement = focusableElements[focusableElements.length - 1];
-            
-            if (e.shiftKey) {
-                // Shift + Tab
-                if (document.activeElement === firstElement) {
-                    e.preventDefault();
-                    userToggle.focus();
-                }
-            } else {
-                // Tab
-                if (document.activeElement === lastElement) {
-                    e.preventDefault();
-                    userToggle.focus();
-                }
-            }
-        }
-    });
     
     // Focus trap for mobile menu
     if (mobileNav) {
@@ -1537,13 +1586,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 const lastElement = focusableElements[focusableElements.length - 1];
                 
                 if (e.shiftKey) {
-                    // Shift + Tab
                     if (document.activeElement === firstElement) {
                         e.preventDefault();
                         lastElement.focus();
                     }
                 } else {
-                    // Tab
                     if (document.activeElement === lastElement) {
                         e.preventDefault();
                         firstElement.focus();
@@ -1551,10 +1598,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             
-            // Close on Escape
             if (e.key === 'Escape') {
                 closeMobileMenu();
-                mobileMenuToggle.focus();
+                if (mobileMenuToggle) mobileMenuToggle.focus();
             }
         });
     }
@@ -1564,122 +1610,8 @@ document.addEventListener('DOMContentLoaded', function() {
 // ERROR HANDLING
 // ====================
 window.addEventListener('error', function(e) {
-    console.error('JavaScript Error in header:', e.message, 'at', e.filename, 'line', e.lineno);
+    console.error('JavaScript Error:', e.message);
 });
-
-// Console log for debugging
-console.log('Header script loaded successfully. Waiting for DOM...');
-
-// Fallback initialization for browsers that might not fire DOMContentLoaded
-if (document.readyState === 'loading') {
-    console.log('Document still loading...');
-} else {
-    console.log('Document already loaded, scripts may run immediately.');
-}
 </script>
 
-<style>
-/* Currency Modal Styles */
-.currency-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10000;
-}
-
-.currency-modal-content {
-  background: var(--white);
-  border-radius: var(--radius-lg);
-  width: 90%;
-  max-width: 400px;
-  max-height: 80vh;
-  overflow-y: auto;
-  animation: modalSlideIn 0.3s ease;
-}
-
-@keyframes modalSlideIn {
-  from {
-    transform: translateY(-50px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.currency-modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--space-lg);
-  border-bottom: 1px solid var(--border);
-}
-
-.currency-modal-header h3 {
-  margin: 0;
-  color: var(--text);
-}
-
-.currency-modal-close {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
-  color: var(--text-light);
-  padding: var(--space-xs);
-  border-radius: var(--radius);
-  transition: all var(--transition);
-}
-
-.currency-modal-close:hover {
-  background: rgba(59, 130, 246, 0.1);
-  color: var(--primary);
-}
-
-.currency-list {
-  padding: var(--space-sm);
-}
-
-.currency-option {
-  display: flex;
-  align-items: center;
-  padding: var(--space-md) var(--space-lg);
-  cursor: pointer;
-  border-radius: var(--radius);
-  transition: all var(--transition);
-  margin-bottom: 2px;
-}
-
-.currency-option:hover {
-  background: rgba(59, 130, 246, 0.08);
-}
-
-.currency-symbol {
-  font-size: 1.2rem;
-  font-weight: var(--fw-bold);
-  width: 40px;
-  color: var(--primary);
-}
-
-.currency-name {
-  flex: 1;
-  color: var(--text);
-}
-
-.currency-check {
-  color: var(--success);
-  font-weight: var(--fw-bold);
-  font-size: 1.2rem;
-  width: 30px;
-  text-align: right;
-}
-</style>
-
-<main style="padding:var(--space-2xl) 0; min-height:70vh;">
+<main>

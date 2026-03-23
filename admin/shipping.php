@@ -90,6 +90,7 @@ $method_id = (int)($_GET['method_id'] ?? 0);
 $success_msg = $_GET['success'] ?? '';
 $error_msg = $_GET['error'] ?? '';
 
+
 // Handle shipping zone POST requests
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['zone_action'])) {
     if (!hash_equals($csrf_token, $_POST['csrf_token'] ?? '')) {
@@ -139,14 +140,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['zone_action'])) {
         }
     }
 
+    // FIX: Use output buffering and JavaScript redirect instead of header()
     if (!empty($success_msg)) {
-        header("Location: shipping.php?success=" . urlencode($success_msg));
-    } else {
-        header("Location: shipping.php?error=" . urlencode($error_msg));
+        echo "<script>window.location.href='shipping.php?success=" . urlencode($success_msg) . "';</script>";
+        exit;
+    } else if (!empty($error_msg)) {
+        echo "<script>window.location.href='shipping.php?error=" . urlencode($error_msg) . "';</script>";
+        exit;
     }
-    exit;
 }
-
 // Handle shipping method POST requests
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['method_action'])) {
     if (!hash_equals($csrf_token, $_POST['csrf_token'] ?? '')) {
@@ -381,37 +383,600 @@ $countries = [
 require_once 'header.php';
 ?>
 
-<div class="admin-main">
+<style>
+/* Base Admin Styles */
+.admin-main {
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* Responsive Typography */
+h1 { font-size: clamp(1.8rem, 4vw, 2rem); }
+h2 { font-size: clamp(1.3rem, 3vw, 1.5rem); }
+h3 { font-size: clamp(1.1rem, 2.5vw, 1.25rem); }
+
+/* Page Header */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+    background: white;
+    padding: 1.5rem 2rem;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    border: 1px solid #e5e7eb;
+}
+
+.page-header h1 {
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.header-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+/* Alerts */
+.alert {
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    animation: slideIn 0.3s ease;
+}
+
+.alert-success {
+    background: #d1fae5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+}
+
+.alert-danger {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(-100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* Card Component */
+.card {
+    background: white;
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    border: 1px solid #e5e7eb;
+    margin-bottom: 1.5rem;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+}
+
+/* Form Elements */
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #1f2937;
+    font-size: 0.95rem;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    font-size: 0.95rem;
+    transition: all 0.3s;
+    background: white;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.form-control:hover {
+    border-color: #9ca3af;
+}
+
+.form-control:disabled {
+    background: #f3f4f6;
+    cursor: not-allowed;
+}
+
+select.form-control[multiple] {
+    min-height: 200px;
+}
+
+small {
+    display: block;
+    font-size: 0.8rem;
+    color: #6b7280;
+    margin-top: 0.25rem;
+}
+
+/* Buttons */
+.btn {
+    padding: 0.75rem 1.5rem;
+    border-radius: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    border: none;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    white-space: nowrap;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #4f46e5, #6366f1);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #4338ca, #4f46e5);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(79, 70, 229, 0.3);
+}
+
+.btn-secondary {
+    background: #6b7280;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #4b5563;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(75, 85, 99, 0.3);
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: white;
+}
+
+.btn-danger:hover {
+    background: linear-gradient(135deg, #dc2626, #b91c1c);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3);
+}
+
+.btn-sm {
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+}
+
+/* Tabs */
+.tabs-container {
+    border-bottom: 1px solid #e5e7eb;
+    margin-bottom: 2rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.tabs-scroll {
+    display: flex;
+    gap: 1rem;
+    padding: 0 0.5rem;
+}
+
+.tab-btn {
+    padding: 0.75rem 1.5rem;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    font-weight: 600;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all 0.3s;
+    white-space: nowrap;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.tab-btn:hover {
+    color: #4f46e5;
+    border-bottom-color: #e5e7eb;
+}
+
+.tab-btn.active {
+    color: #4f46e5;
+    border-bottom-color: #4f46e5;
+}
+
+/* Status Badges */
+.status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    display: inline-block;
+}
+
+.status-active {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.status-inactive {
+    background: #f3f4f6;
+    color: #374151;
+}
+
+/* Tables */
+.table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 12px;
+    margin: 1rem 0;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 800px;
+}
+
+th {
+    text-align: left;
+    padding: 1rem;
+    background: #f9fafb;
+    color: #4b5563;
+    font-weight: 600;
+    font-size: 0.85rem;
+    border-bottom: 2px solid #e5e7eb;
+    white-space: nowrap;
+}
+
+td {
+    padding: 1rem;
+    border-bottom: 1px solid #e5e7eb;
+    color: #1f2937;
+    font-size: 0.9rem;
+    vertical-align: middle;
+}
+
+tr:hover {
+    background: #f9fafb;
+}
+
+/* Action Buttons */
+.action-buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* Zone Header */
+.zone-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    background: #f9fafb;
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.zone-info h3 {
+    margin: 0 0 0.5rem;
+    color: #1f2937;
+}
+
+.zone-info p {
+    margin: 0;
+    color: #6b7280;
+}
+
+/* Rate Row */
+.rate-row {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.rate-row input {
+    min-width: 100px;
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: #6b7280;
+}
+
+.empty-state i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    color: #e5e7eb;
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 1024px) {
+    .admin-main {
+        padding: 1.5rem;
+    }
     
+    .form-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .admin-main {
+        padding: 1rem;
+    }
+    
+    .page-header {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 1.25rem;
+    }
+    
+    .header-actions {
+        width: 100%;
+        justify-content: stretch;
+    }
+    
+    .header-actions .btn {
+        flex: 1;
+        justify-content: center;
+    }
+    
+    .card {
+        padding: 1.25rem;
+    }
+    
+    .form-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .btn {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .action-buttons {
+        flex-direction: column;
+    }
+    
+    .action-buttons .btn {
+        width: 100%;
+    }
+    
+    .zone-header {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .rate-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .rate-row input {
+        width: 100%;
+    }
+    
+    .rate-row .btn {
+        width: auto;
+    }
+    
+    .tabs-container {
+        margin-bottom: 1.5rem;
+    }
+    
+    .tab-btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.85rem;
+    }
+    
+    .table-responsive {
+        margin: 0 -1rem;
+        width: calc(100% + 2rem);
+        border-radius: 0;
+    }
+}
+
+@media (max-width: 480px) {
+    .admin-main {
+        padding: 0.75rem;
+    }
+    
+    .page-header h1 {
+        font-size: 1.5rem;
+    }
+    
+    .form-label {
+        font-size: 0.9rem;
+    }
+    
+    .form-control {
+        padding: 0.6rem 0.75rem;
+    }
+    
+    .btn-sm {
+        width: auto;
+    }
+    
+    .empty-state {
+        padding: 2rem;
+    }
+    
+    .empty-state i {
+        font-size: 2rem;
+    }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .page-header, .card {
+        background: #1f2937;
+        border-color: #374151;
+    }
+    
+    .form-label {
+        color: #e5e7eb;
+    }
+    
+    .form-control {
+        background: #374151;
+        border-color: #4b5563;
+        color: #f3f4f6;
+    }
+    
+    .form-control:focus {
+        border-color: #818cf8;
+    }
+    
+    .form-control:disabled {
+        background: #4b5563;
+    }
+    
+    table {
+        background: #1f2937;
+    }
+    
+    th {
+        background: #374151;
+        color: #e5e7eb;
+    }
+    
+    td {
+        color: #d1d5db;
+    }
+    
+    tr:hover {
+        background: #374151;
+    }
+    
+    .zone-header {
+        background: #374151;
+    }
+    
+    .zone-info h3 {
+        color: #f3f4f6;
+    }
+    
+    .zone-info p {
+        color: #9ca3af;
+    }
+    
+    small {
+        color: #9ca3af;
+    }
+    
+    .tab-btn {
+        color: #9ca3af;
+    }
+    
+    .tab-btn:hover {
+        color: #818cf8;
+    }
+    
+    .tab-btn.active {
+        color: #818cf8;
+        border-bottom-color: #818cf8;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .btn, .action-buttons, .header-actions {
+        display: none !important;
+    }
+    
+    .card {
+        box-shadow: none;
+        border: 1px solid #000;
+        page-break-inside: avoid;
+    }
+    
+    table {
+        border-collapse: collapse;
+    }
+    
+    th, td {
+        border: 1px solid #000;
+    }
+}
+</style>
+
+<div class="admin-main">
     <!-- Page Header -->
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <div class="page-header">
         <div>
-            <h1 style="font-size: 2rem; margin-bottom: 0.5rem; color: var(--admin-dark);">
-                <i class="fas fa-truck"></i> Shipping Zones
-            </h1>
-            <p style="color: var(--admin-gray);">Configure shipping zones, methods, and rates</p>
+            <h1><i class="fas fa-truck"></i> Shipping Zones</h1>
+            <p style="color: #6b7280; margin-top: 0.5rem;">Configure shipping zones, methods, and rates</p>
         </div>
-        <a href="?action=add_zone" class="btn btn-primary">
-            <i class="fas fa-plus"></i> Add Shipping Zone
-        </a>
+        <div class="header-actions">
+            <a href="?action=add_zone" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Add Shipping Zone
+            </a>
+        </div>
     </div>
 
     <!-- Messages -->
     <?php if (!empty($success_msg)): ?>
-        <div class="alert alert-success"><?= htmlspecialchars($success_msg) ?></div>
+        <div class="alert alert-success">
+            <i class="fas fa-check-circle"></i>
+            <?= htmlspecialchars($success_msg) ?>
+        </div>
     <?php endif; ?>
     <?php if (!empty($error_msg)): ?>
-        <div class="alert alert-danger"><?= htmlspecialchars($error_msg) ?></div>
+        <div class="alert alert-danger">
+            <i class="fas fa-exclamation-circle"></i>
+            <?= htmlspecialchars($error_msg) ?>
+        </div>
     <?php endif; ?>
 
     <!-- Main Tabs -->
-    <div style="border-bottom: 1px solid var(--admin-border); margin-bottom: 2rem;">
-        <div style="display: flex; gap: 1rem;">
+    <div class="tabs-container">
+        <div class="tabs-scroll">
             <a href="?tab=zones" class="tab-btn <?= $current_tab === 'zones' ? 'active' : '' ?>">
-                Shipping Zones
+                <i class="fas fa-globe"></i> Shipping Zones
             </a>
             <a href="?tab=methods&zone_id=<?= $current_zone_id ?>" class="tab-btn <?= $current_tab === 'methods' ? 'active' : '' ?>">
-                Shipping Methods
+                <i class="fas fa-truck"></i> Shipping Methods
             </a>
         </div>
     </div>
@@ -511,8 +1076,8 @@ require_once 'header.php';
         <?php else: ?>
             <!-- Zones List -->
             <div class="card">
-                <div style="overflow-x: auto;">
-                    <table style="width: 100%;">
+                <div class="table-responsive">
+                    <table>
                         <thead>
                             <tr>
                                 <th>Priority</th>
@@ -526,9 +1091,9 @@ require_once 'header.php';
                         <tbody>
                             <?php if (empty($zones)): ?>
                                 <tr>
-                                    <td colspan="6" style="text-align: center; padding: 3rem;">
-                                        <i class="fas fa-globe" style="font-size: 3rem; color: var(--admin-gray); margin-bottom: 1rem; display: block;"></i>
-                                        No shipping zones configured
+                                    <td colspan="6" class="empty-state">
+                                        <i class="fas fa-globe"></i>
+                                        <p>No shipping zones configured</p>
                                     </td>
                                 </tr>
                             <?php else: ?>
@@ -538,7 +1103,7 @@ require_once 'header.php';
                                         <td>
                                             <strong><?= htmlspecialchars($zone['name']) ?></strong>
                                             <?php if (!empty($zone['description'])): ?>
-                                                <div style="font-size: 0.875rem; color: var(--admin-gray);">
+                                                <div style="font-size: 0.8rem; color: #6b7280;">
                                                     <?= htmlspecialchars(substr($zone['description'], 0, 100)) ?>
                                                 </div>
                                             <?php endif; ?>
@@ -631,18 +1196,14 @@ require_once 'header.php';
 
         <?php if ($current_zone): ?>
             <!-- Zone Header -->
-            <div class="card" style="margin-bottom: 2rem; background: var(--admin-light);">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <h3 style="margin: 0;"><?= htmlspecialchars($current_zone['name']) ?></h3>
-                        <p style="margin: 0.5rem 0 0; color: var(--admin-gray);">
-                            <?= htmlspecialchars($current_zone['description'] ?? 'No description') ?>
-                        </p>
-                    </div>
-                    <a href="?action=add_method&zone_id=<?= $current_zone['id'] ?>" class="btn btn-primary">
-                        <i class="fas fa-plus"></i> Add Shipping Method
-                    </a>
+            <div class="zone-header">
+                <div class="zone-info">
+                    <h3><?= htmlspecialchars($current_zone['name']) ?></h3>
+                    <p><?= htmlspecialchars($current_zone['description'] ?? 'No description') ?></p>
                 </div>
+                <a href="?action=add_method&zone_id=<?= $current_zone['id'] ?>" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Add Shipping Method
+                </a>
             </div>
 
             <?php if ($action === 'add_method' || $edit_method): ?>
@@ -742,14 +1303,14 @@ require_once 'header.php';
 
                             <div class="form-group">
                                 <label class="form-label">Estimated Delivery (days)</label>
-                                <div style="display: flex; gap: 0.5rem;">
+                                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                                     <input type="number" name="estimated_days_min" 
                                            value="<?= htmlspecialchars($edit_method['estimated_days_min'] ?? '') ?>" 
-                                           class="form-control" placeholder="Min" style="width: 100px;">
-                                    <span>to</span>
+                                           class="form-control" placeholder="Min" style="flex: 1;">
+                                    <span style="align-self: center;">to</span>
                                     <input type="number" name="estimated_days_max" 
                                            value="<?= htmlspecialchars($edit_method['estimated_days_max'] ?? '') ?>" 
-                                           class="form-control" placeholder="Max" style="width: 100px;">
+                                           class="form-control" placeholder="Max" style="flex: 1;">
                                 </div>
                             </div>
                         </div>
@@ -768,37 +1329,37 @@ require_once 'header.php';
                             <div id="ratesList">
                                 <?php if (!empty($edit_method['rates'])): ?>
                                     <?php foreach ($edit_method['rates'] as $index => $rate): ?>
-                                        <div class="rate-row" style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                                        <div class="rate-row">
                                             <input type="number" name="rates[<?= $index ?>][min]" 
                                                    value="<?= $rate['min_value'] ?>" class="form-control" 
-                                                   placeholder="Min" style="flex: 1;">
+                                                   placeholder="Min">
                                             <input type="number" name="rates[<?= $index ?>][max]" 
                                                    value="<?= $rate['max_value'] ?>" class="form-control" 
-                                                   placeholder="Max" style="flex: 1;">
+                                                   placeholder="Max">
                                             <input type="number" name="rates[<?= $index ?>][cost]" 
                                                    value="<?= $rate['cost'] ?>" class="form-control" 
-                                                   placeholder="Cost" style="flex: 1;">
+                                                   placeholder="Cost">
                                             <input type="number" name="rates[<?= $index ?>][additional]" 
                                                    value="<?= $rate['additional_item_cost'] ?>" class="form-control" 
-                                                   placeholder="Additional per item" style="flex: 1;">
-                                            <button type="button" class="btn btn-danger" onclick="this.closest('.rate-row').remove()">
+                                                   placeholder="Additional per item">
+                                            <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.rate-row').remove()">
                                                 <i class="fas fa-times"></i>
                                             </button>
                                         </div>
                                     <?php endforeach; ?>
                                 <?php else: ?>
-                                    <div class="rate-row" style="display: flex; gap: 1rem; margin-bottom: 1rem;">
-                                        <input type="number" name="rates[0][min]" class="form-control" placeholder="Min" style="flex: 1;">
-                                        <input type="number" name="rates[0][max]" class="form-control" placeholder="Max" style="flex: 1;">
-                                        <input type="number" name="rates[0][cost]" class="form-control" placeholder="Cost" style="flex: 1;">
-                                        <input type="number" name="rates[0][additional]" class="form-control" placeholder="Additional per item" style="flex: 1;">
-                                        <button type="button" class="btn btn-danger" onclick="this.closest('.rate-row').remove()">
+                                    <div class="rate-row">
+                                        <input type="number" name="rates[0][min]" class="form-control" placeholder="Min">
+                                        <input type="number" name="rates[0][max]" class="form-control" placeholder="Max">
+                                        <input type="number" name="rates[0][cost]" class="form-control" placeholder="Cost">
+                                        <input type="number" name="rates[0][additional]" class="form-control" placeholder="Additional per item">
+                                        <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.rate-row').remove()">
                                             <i class="fas fa-times"></i>
                                         </button>
                                     </div>
                                 <?php endif; ?>
                             </div>
-                            <button type="button" class="btn btn-secondary" onclick="addRateRow()">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="addRateRow()">
                                 <i class="fas fa-plus"></i> Add Rate
                             </button>
                         </div>
@@ -813,7 +1374,7 @@ require_once 'header.php';
                             </div>
 
                             <div class="form-group">
-                                <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem;">
+                                <label class="form-check-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                                     <input type="checkbox" name="is_default" value="1" 
                                            <?= ($edit_method['is_default'] ?? 0) ? 'checked' : '' ?>>
                                     Set as Default Method
@@ -835,8 +1396,8 @@ require_once 'header.php';
                 <!-- Methods List -->
                 <div class="card">
                     <?php if (empty($methods)): ?>
-                        <div style="text-align: center; padding: 3rem;">
-                            <i class="fas fa-truck" style="font-size: 3rem; color: var(--admin-gray); margin-bottom: 1rem; display: block;"></i>
+                        <div class="empty-state">
+                            <i class="fas fa-truck"></i>
                             <h3>No shipping methods</h3>
                             <p>Add your first shipping method for this zone</p>
                             <a href="?action=add_method&zone_id=<?= $current_zone['id'] ?>" class="btn btn-primary">
@@ -844,8 +1405,8 @@ require_once 'header.php';
                             </a>
                         </div>
                     <?php else: ?>
-                        <div style="overflow-x: auto;">
-                            <table style="width: 100%;">
+                        <div class="table-responsive">
+                            <table>
                                 <thead>
                                     <tr>
                                         <th>Name</th>
@@ -864,7 +1425,7 @@ require_once 'header.php';
                                             <td>
                                                 <strong><?= htmlspecialchars($method['name']) ?></strong>
                                                 <?php if (!empty($method['description'])): ?>
-                                                    <div style="font-size: 0.875rem; color: var(--admin-gray);">
+                                                    <div style="font-size: 0.8rem; color: #6b7280;">
                                                         <?= htmlspecialchars(substr($method['description'], 0, 50)) ?>
                                                     </div>
                                                 <?php endif; ?>
@@ -902,7 +1463,7 @@ require_once 'header.php';
                                             </td>
                                             <td style="text-align: center;">
                                                 <?php if ($method['is_default']): ?>
-                                                    <i class="fas fa-check-circle" style="color: var(--admin-success);"></i>
+                                                    <i class="fas fa-check-circle" style="color: #10b981;"></i>
                                                 <?php endif; ?>
                                             </td>
                                             <td>
@@ -930,7 +1491,7 @@ require_once 'header.php';
 
         <?php else: ?>
             <div class="card">
-                <div style="text-align: center; padding: 3rem;">
+                <div class="empty-state">
                     <p>Please select a shipping zone to manage methods.</p>
                     <a href="?tab=zones" class="btn btn-primary">Go to Zones</a>
                 </div>
@@ -938,63 +1499,6 @@ require_once 'header.php';
         <?php endif; ?>
     <?php endif; ?>
 </div>
-
-<style>
-.status-badge {
-    padding: 0.25rem 0.75rem;
-    border-radius: 999px;
-    font-size: 0.875rem;
-    font-weight: 600;
-    display: inline-block;
-}
-
-.status-active {
-    background: #d1fae5;
-    color: #065f46;
-}
-
-.status-inactive {
-    background: #f3f4f6;
-    color: #374151;
-}
-
-.tab-btn {
-    padding: 0.75rem 1.5rem;
-    background: none;
-    border: none;
-    border-bottom: 3px solid transparent;
-    font-weight: 600;
-    color: var(--admin-gray);
-    cursor: pointer;
-    text-decoration: none;
-    display: inline-block;
-}
-
-.tab-btn:hover {
-    color: var(--admin-primary);
-}
-
-.tab-btn.active {
-    color: var(--admin-primary);
-    border-bottom-color: var(--admin-primary);
-}
-
-.btn-sm {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.875rem;
-}
-
-.rate-row {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 1rem;
-    align-items: center;
-}
-
-.rate-row input {
-    flex: 1;
-}
-</style>
 
 <script>
 function toggleRateFields() {
@@ -1018,11 +1522,11 @@ function addRateRow() {
     const row = document.createElement('div');
     row.className = 'rate-row';
     row.innerHTML = `
-        <input type="number" name="rates[${index}][min]" class="form-control" placeholder="Min" style="flex: 1;">
-        <input type="number" name="rates[${index}][max]" class="form-control" placeholder="Max" style="flex: 1;">
-        <input type="number" name="rates[${index}][cost]" class="form-control" placeholder="Cost" style="flex: 1;">
-        <input type="number" name="rates[${index}][additional]" class="form-control" placeholder="Additional per item" style="flex: 1;">
-        <button type="button" class="btn btn-danger" onclick="this.closest('.rate-row').remove()">
+        <input type="number" name="rates[${index}][min]" class="form-control" placeholder="Min">
+        <input type="number" name="rates[${index}][max]" class="form-control" placeholder="Max">
+        <input type="number" name="rates[${index}][cost]" class="form-control" placeholder="Cost">
+        <input type="number" name="rates[${index}][additional]" class="form-control" placeholder="Additional per item">
+        <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.rate-row').remove()">
             <i class="fas fa-times"></i>
         </button>
     `;
@@ -1033,6 +1537,23 @@ function addRateRow() {
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
     toggleRateFields();
+    
+    // Prevent form resubmission on refresh
+    if (window.history.replaceState) {
+        window.history.replaceState(null, null, window.location.href);
+    }
+});
+
+// Add keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    // Ctrl/Cmd + S to save form
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        const form = document.querySelector('form');
+        if (form) {
+            form.submit();
+        }
+    }
 });
 </script>
 

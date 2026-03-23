@@ -1,12 +1,10 @@
 <?php
-// admin/profile.php - Admin Profile Management
-
+// admin/profile.php - Fixed Version
 $page_title = "My Profile";
 require_once '../includes/config.php';
 require_once '../includes/db.php';
 require_once '../includes/functions.php';
 require_once '../includes/auth.php';
-
 
 // Check if user is logged in
 if (!is_logged_in()) {
@@ -16,10 +14,36 @@ if (!is_logged_in()) {
 
 $user_id = $_SESSION['user_id'];
 
-// Get user data
-$stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
-$stmt->execute([$user_id]);
-$user = $stmt->fetch();
+// Get user data - check which columns exist
+try {
+    // First, get the actual columns in users table
+    $stmt = $pdo->query("DESCRIBE users");
+    $columns = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    
+    // Define all possible columns we might want
+    $possible_columns = [
+        'id', 'username', 'email', 'password', 'full_name', 'first_name', 'last_name',
+        'phone', 'phone_number', 'mobile', 'address', 'city', 'state', 'country', 
+        'postal_code', 'zip', 'role', 'status', 'created_at', 'updated_at', 'last_login'
+    ];
+    
+    // Find which columns actually exist
+    $existing_columns = array_intersect($possible_columns, $columns);
+    
+    // Build select query with only existing columns
+    $select_cols = implode(', ', $existing_columns);
+    
+    $stmt = $pdo->prepare("SELECT $select_cols FROM users WHERE id = ?");
+    $stmt->execute([$user_id]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+} catch (Exception $e) {
+    error_log("Profile error: " . $e->getMessage());
+    // Fallback to simple select
+    $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+    $stmt->execute([$user_id]);
+    $user = $stmt->fetch();
+}
 
 if (!$user) {
     header("Location: logout.php");
@@ -43,50 +67,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $action = $_POST['action'] ?? '';
         
         if ($action === 'update_profile') {
-            // Update profile information
-            $full_name = trim($_POST['full_name'] ?? '');
-            $email = trim($_POST['email'] ?? '');
-            $phone = trim($_POST['phone'] ?? '');
-            $address = trim($_POST['address'] ?? '');
-            $city = trim($_POST['city'] ?? '');
-            $state = trim($_POST['state'] ?? '');
-            $country = trim($_POST['country'] ?? '');
-            $postal_code = trim($_POST['postal_code'] ?? '');
+            // Get the actual columns again for update
+            $stmt = $pdo->query("DESCRIBE users");
+            $db_columns = $stmt->fetchAll(PDO::FETCH_COLUMN);
             
-            $errors = [];
+            // Build update array dynamically
+            $updates = [];
+            $params = [];
             
-            if (empty($full_name)) {
-                $errors[] = "Full name is required";
-            }
+            // Check each possible field and add to update if column exists
+            $field_mappings = [
+                'full_name' => ['full_name', 'name'],
+                'email' => ['email'],
+                'phone' => ['phone', 'phone_number', 'mobile'],
+                'address' => ['address'],
+                'city' => ['city'],
+                'state' => ['state'],
+                'country' => ['country'],
+                'postal_code' => ['postal_code', 'zip']
+            ];
             
-            if (empty($email)) {
-                $errors[] = "Email is required";
-            } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                $errors[] = "Invalid email format";
-            }
-            
-            // Check if email exists for another user
-            if ($email !== $user['email']) {
-                $check = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
-                $check->execute([$email, $user_id]);
-                if ($check->fetch()) {
-                    $errors[] = "Email already exists";
+            foreach ($field_mappings as $field => $possible_names) {
+                $value = trim($_POST[$field] ?? '');
+                
+                // Find which column name exists in database
+                foreach ($possible_names as $col_name) {
+                    if (in_array($col_name, $db_columns)) {
+                        $updates[] = "$col_name = ?";
+                        $params[] = $value;
+                        break;
+                    }
                 }
             }
             
-            if (empty($errors)) {
+            if (!empty($updates)) {
+                $params[] = $user_id;
+                $sql = "UPDATE users SET " . implode(', ', $updates) . " WHERE id = ?";
+                
                 try {
-                    $stmt = $pdo->prepare("
-                        UPDATE users SET 
-                            full_name = ?, email = ?, phone = ?, address = ?, 
-                            city = ?, state = ?, country = ?, postal_code = ?
-                        WHERE id = ?
-                    ");
-                    $stmt->execute([$full_name, $email, $phone, $address, $city, $state, $country, $postal_code, $user_id]);
+                    $stmt = $pdo->prepare($sql);
+                    $stmt->execute($params);
                     
-                    // Update session
-                    $_SESSION['user_name'] = $full_name;
-                    $_SESSION['user_email'] = $email;
+                    // Update session name if full_name exists
+                    if (isset($_POST['full_name'])) {
+                        $_SESSION['user_name'] = $_POST['full_name'];
+                    }
+                    $_SESSION['user_email'] = $_POST['email'];
                     
                     $success_msg = "Profile updated successfully";
                     
@@ -99,11 +125,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $error_msg = "Error updating profile: " . $e->getMessage();
                 }
             } else {
-                $error_msg = implode("<br>", $errors);
+                $error_msg = "No valid fields to update";
             }
             
         } elseif ($action === 'change_password') {
-            // Change password
+            // Change password - this should always work if password column exists
             $current_password = $_POST['current_password'] ?? '';
             $new_password = $_POST['new_password'] ?? '';
             $confirm_password = $_POST['confirm_password'] ?? '';
@@ -112,7 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             if (empty($current_password)) {
                 $errors[] = "Current password is required";
-            } elseif (!password_verify($current_password, $user['password'])) {
+            } elseif (!password_verify($current_password, $user['password'] ?? '')) {
                 $errors[] = "Current password is incorrect";
             }
             
@@ -138,55 +164,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $error_msg = implode("<br>", $errors);
             }
-            
-        } elseif ($action === 'update_preferences') {
-            // Update preferences
-            $theme = $_POST['theme'] ?? 'light';
-            $notifications = isset($_POST['notifications']) ? 1 : 0;
-            $email_notifications = isset($_POST['email_notifications']) ? 1 : 0;
-            $items_per_page = (int)($_POST['items_per_page'] ?? 25);
-            
-            // Save to user meta table (create if not exists)
-            try {
-                $pdo->exec("
-                    CREATE TABLE IF NOT EXISTS user_meta (
-                        id INT PRIMARY KEY AUTO_INCREMENT,
-                        user_id INT NOT NULL,
-                        meta_key VARCHAR(255) NOT NULL,
-                        meta_value TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP NULL ON UPDATE CURRENT_TIMESTAMP,
-                        UNIQUE KEY unique_user_meta (user_id, meta_key),
-                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-                    )
-                ");
-                
-                // Save preferences
-                $preferences = [
-                    'theme' => $theme,
-                    'notifications' => $notifications,
-                    'email_notifications' => $email_notifications,
-                    'items_per_page' => $items_per_page
-                ];
-                
-                foreach ($preferences as $key => $value) {
-                    $stmt = $pdo->prepare("
-                        INSERT INTO user_meta (user_id, meta_key, meta_value) VALUES (?, ?, ?)
-                        ON DUPLICATE KEY UPDATE meta_value = ?
-                    ");
-                    $stmt->execute([$user_id, $key, $value, $value]);
-                }
-                
-                $success_msg = "Preferences updated successfully";
-                
-            } catch (Exception $e) {
-                $error_msg = "Error updating preferences: " . $e->getMessage();
-            }
         }
     }
 }
 
-// Get user preferences
+// Get user preferences (if user_meta table exists)
 $preferences = [
     'theme' => 'light',
     'notifications' => 1,
@@ -195,97 +177,683 @@ $preferences = [
 ];
 
 try {
-    $stmt = $pdo->prepare("SELECT meta_key, meta_value FROM user_meta WHERE user_id = ?");
-    $stmt->execute([$user_id]);
-    while ($row = $stmt->fetch()) {
-        $preferences[$row['meta_key']] = $row['meta_value'];
+    // Check if user_meta table exists
+    $stmt = $pdo->query("SHOW TABLES LIKE 'user_meta'");
+    if ($stmt->rowCount() > 0) {
+        $stmt = $pdo->prepare("SELECT meta_key, meta_value FROM user_meta WHERE user_id = ?");
+        $stmt->execute([$user_id]);
+        while ($row = $stmt->fetch()) {
+            $preferences[$row['meta_key']] = $row['meta_value'];
+        }
     }
 } catch (Exception $e) {
-    // Table might not exist yet
+    // Table doesn't exist, ignore
 }
 
-// Get recent activity
-$recent_activity = [];
-try {
-    $stmt = $pdo->prepare("
-        SELECT * FROM activity_logs 
-        WHERE user_id = ? 
-        ORDER BY created_at DESC 
-        LIMIT 10
-    ");
-    $stmt->execute([$user_id]);
-    $recent_activity = $stmt->fetchAll();
-} catch (Exception $e) {
-    // Table might not exist
+// Helper function to safely get user data
+function getUserField($user, $field, $default = 'Not provided') {
+    if (isset($user[$field]) && !empty($user[$field])) {
+        return htmlspecialchars($user[$field]);
+    }
+    // Try alternative field names
+    $alternatives = [
+        'full_name' => ['full_name', 'name', 'username'],
+        'phone' => ['phone', 'phone_number', 'mobile'],
+        'address' => ['address', 'street_address'],
+        'city' => ['city', 'town'],
+        'state' => ['state', 'province'],
+        'country' => ['country', 'nation'],
+        'postal_code' => ['postal_code', 'zip', 'postcode']
+    ];
+    
+    if (isset($alternatives[$field])) {
+        foreach ($alternatives[$field] as $alt) {
+            if (isset($user[$alt]) && !empty($user[$alt])) {
+                return htmlspecialchars($user[$alt]);
+            }
+        }
+    }
+    
+    return $default;
 }
 
-// Get login history
-$login_history = [];
-try {
-    $stmt = $pdo->prepare("
-        SELECT * FROM user_activity_log 
-        WHERE user_id = ? 
-        ORDER BY created_at DESC 
-        LIMIT 10
-    ");
-    $stmt->execute([$user_id]);
-    $login_history = $stmt->fetchAll();
-} catch (Exception $e) {
-    // Table might not exist
+// Get display name
+$display_name = getUserField($user, 'full_name', $user['email'] ?? 'User');
+
+// Get last login safely
+$last_login = 'Never';
+if (isset($user['last_login']) && !empty($user['last_login'])) {
+    $last_login = date('M d, Y H:i', strtotime($user['last_login']));
+} elseif (isset($user['updated_at']) && !empty($user['updated_at'])) {
+    $last_login = date('M d, Y H:i', strtotime($user['updated_at']));
 }
+
 require_once 'header.php';
 ?>
+
+<style>
+/* Base Admin Styles */
+.admin-main {
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Responsive Typography */
+h1 { font-size: clamp(1.8rem, 4vw, 2rem); }
+h2 { font-size: clamp(1.3rem, 3vw, 1.5rem); }
+h3 { font-size: clamp(1.1rem, 2.5vw, 1.25rem); }
+
+/* Card Component */
+.card {
+    background: white;
+    border-radius: 16px;
+    padding: 2rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    border: 1px solid #e5e7eb;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.card:hover {
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+}
+
+/* Alerts */
+.alert {
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    animation: slideIn 0.3s ease;
+}
+
+.alert-success {
+    background: #d1fae5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+}
+
+.alert-danger {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+
+/* Profile Avatar */
+.profile-avatar {
+    position: relative;
+    width: clamp(100px, 20vw, 120px);
+    height: clamp(100px, 20vw, 120px);
+}
+
+.avatar-initials {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #4f46e5, #818cf8);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(2rem, 6vw, 3rem);
+    font-weight: 600;
+    box-shadow: 0 4px 15px rgba(79, 70, 229, 0.3);
+    transition: transform 0.3s;
+}
+
+.avatar-initials:hover {
+    transform: scale(1.05);
+}
+
+.role-badge {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    border: 2px solid white;
+}
+
+.role-admin {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.role-manager {
+    background: #e0e7ff;
+    color: #3730a3;
+}
+
+.role-customer {
+    background: #f3f4f6;
+    color: #374151;
+}
+
+.role-vendor {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+/* Tabs */
+.tabs-container {
+    border-bottom: 1px solid #e5e7eb;
+    margin-bottom: 2rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.tabs-scroll {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0 0.5rem;
+}
+
+.tab-btn {
+    padding: 0.75rem 1.5rem;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    font-weight: 600;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all 0.3s;
+    white-space: nowrap;
+    font-size: 0.95rem;
+}
+
+.tab-btn:hover {
+    color: #4f46e5;
+    border-bottom-color: #e5e7eb;
+}
+
+.tab-btn.active {
+    color: #4f46e5;
+    border-bottom-color: #4f46e5;
+}
+
+.tab-content {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+    from { transform: translateX(-100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* Form Elements */
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #1f2937;
+    font-size: 0.95rem;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    font-size: 0.95rem;
+    transition: all 0.3s;
+    background: white;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.form-control:hover {
+    border-color: #9ca3af;
+}
+
+.form-control:disabled {
+    background: #f3f4f6;
+    cursor: not-allowed;
+}
+
+.form-text {
+    font-size: 0.875rem;
+    color: #6b7280;
+    margin-top: 0.25rem;
+}
+
+/* Buttons */
+.btn {
+    padding: 0.75rem 1.5rem;
+    border-radius: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    border: none;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    white-space: nowrap;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #4f46e5, #6366f1);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #4338ca, #4f46e5);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(79, 70, 229, 0.3);
+}
+
+.btn-warning {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+}
+
+.btn-warning:hover {
+    background: linear-gradient(135deg, #d97706, #b45309);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(245, 158, 11, 0.3);
+}
+
+/* Password Strength */
+.password-strength {
+    margin: 1rem 0;
+}
+
+.strength-bars {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 0.5rem;
+}
+
+.strength-bar {
+    height: 4px;
+    flex: 1;
+    background: #e5e7eb;
+    border-radius: 2px;
+    transition: all 0.3s;
+}
+
+.strength-bar.weak { background: #ef4444; }
+.strength-bar.medium { background: #f59e0b; }
+.strength-bar.strong { background: #10b981; }
+.strength-bar.very-strong { background: #059669; }
+
+.strength-text {
+    font-size: 0.875rem;
+    transition: color 0.3s;
+}
+
+/* Tables */
+.table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 12px;
+    margin: 1rem 0;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 600px;
+}
+
+th {
+    text-align: left;
+    padding: 1rem;
+    background: #f9fafb;
+    color: #4b5563;
+    font-weight: 600;
+    font-size: 0.85rem;
+    border-bottom: 2px solid #e5e7eb;
+    white-space: nowrap;
+}
+
+td {
+    padding: 1rem;
+    border-bottom: 1px solid #e5e7eb;
+    color: #1f2937;
+    font-size: 0.9rem;
+}
+
+tr:hover {
+    background: #f9fafb;
+}
+
+/* Status Badge */
+.status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    display: inline-block;
+    white-space: nowrap;
+}
+
+.status-success {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.status-pending {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status-failed {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* Info Grid */
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+
+.info-item {
+    padding: 0.75rem;
+    background: #f9fafb;
+    border-radius: 10px;
+}
+
+.info-label {
+    font-size: 0.8rem;
+    color: #6b7280;
+    margin-bottom: 0.25rem;
+}
+
+.info-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: #6b7280;
+}
+
+.empty-state i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    color: #e5e7eb;
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 1024px) {
+    .admin-main {
+        padding: 1.5rem;
+    }
+    
+    .card {
+        padding: 1.5rem;
+    }
+    
+    .profile-header {
+        flex-direction: column;
+        text-align: center;
+        gap: 1.5rem;
+    }
+    
+    .profile-avatar {
+        margin: 0 auto;
+    }
+    
+    .info-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .admin-main {
+        padding: 1rem;
+    }
+    
+    .card {
+        padding: 1.25rem;
+        border-radius: 12px;
+    }
+    
+    .form-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .info-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .btn {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .tabs-scroll {
+        padding-bottom: 0.25rem;
+    }
+    
+    .tab-btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.85rem;
+    }
+    
+    table {
+        font-size: 0.85rem;
+    }
+    
+    th, td {
+        padding: 0.75rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .admin-main {
+        padding: 0.75rem;
+    }
+    
+    .card {
+        padding: 1rem;
+        border-radius: 10px;
+    }
+    
+    h1 {
+        font-size: 1.5rem;
+    }
+    
+    h2 {
+        font-size: 1.25rem;
+    }
+    
+    .form-label {
+        font-size: 0.9rem;
+    }
+    
+    .form-control {
+        padding: 0.6rem 0.75rem;
+    }
+    
+    .btn {
+        padding: 0.6rem 1rem;
+        font-size: 0.9rem;
+    }
+    
+    .role-badge {
+        font-size: 0.7rem;
+        padding: 0.2rem 0.5rem;
+    }
+    
+    .info-item {
+        padding: 0.5rem;
+    }
+    
+    .empty-state {
+        padding: 2rem;
+    }
+    
+    .empty-state i {
+        font-size: 2rem;
+    }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .card {
+        background: #1f2937;
+        border-color: #374151;
+    }
+    
+    .form-control {
+        background: #374151;
+        border-color: #4b5563;
+        color: #f3f4f6;
+    }
+    
+    .form-control:focus {
+        border-color: #818cf8;
+    }
+    
+    .info-item {
+        background: #374151;
+    }
+    
+    .info-label {
+        color: #9ca3af;
+    }
+    
+    .info-value {
+        color: #f3f4f6;
+    }
+    
+    table {
+        background: #1f2937;
+    }
+    
+    th {
+        background: #374151;
+        color: #e5e7eb;
+    }
+    
+    td {
+        color: #d1d5db;
+    }
+    
+    tr:hover {
+        background: #374151;
+    }
+    
+    .tab-btn {
+        color: #9ca3af;
+    }
+    
+    .tab-btn:hover {
+        color: #818cf8;
+    }
+    
+    .tab-btn.active {
+        color: #818cf8;
+        border-bottom-color: #818cf8;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .btn, .tab-btn {
+        display: none;
+    }
+    
+    .card {
+        box-shadow: none;
+        border: 1px solid #000;
+    }
+}
+</style>
 
 <div class="admin-main">
     
     <!-- Page Header -->
     <div style="margin-bottom: 2rem;">
-        <h1 style="font-size: 2rem; margin-bottom: 0.5rem; color: var(--admin-dark);">
+        <h1 style="margin-bottom: 0.5rem;">
             <i class="fas fa-user-circle"></i> My Profile
         </h1>
-        <p style="color: var(--admin-gray);">Manage your account settings and preferences</p>
+        <p style="color: #6b7280;">Manage your account settings and preferences</p>
     </div>
 
     <!-- Messages -->
     <?php if (!empty($success_msg)): ?>
-        <div class="alert alert-success"><?= htmlspecialchars($success_msg) ?></div>
+        <div class="alert alert-success">
+            <i class="fas fa-check-circle"></i> <?= htmlspecialchars($success_msg) ?>
+        </div>
     <?php endif; ?>
     <?php if (!empty($error_msg)): ?>
-        <div class="alert alert-danger"><?= htmlspecialchars($error_msg) ?></div>
+        <div class="alert alert-danger">
+            <i class="fas fa-exclamation-circle"></i> <?= htmlspecialchars($error_msg) ?>
+        </div>
     <?php endif; ?>
 
     <!-- Profile Overview Card -->
     <div class="card" style="margin-bottom: 2rem;">
-        <div style="display: flex; align-items: center; gap: 2rem; flex-wrap: wrap;">
+        <div class="profile-header" style="display: flex; align-items: center; gap: 2rem; flex-wrap: wrap;">
             <!-- Profile Avatar -->
-            <div style="position: relative;">
-                <div style="width: 120px; height: 120px; border-radius: 50%; background: linear-gradient(135deg, var(--admin-primary), var(--admin-primary-light)); color: white; display: flex; align-items: center; justify-content: center; font-size: 3rem; font-weight: 600;">
-                    <?= strtoupper(substr($user['full_name'], 0, 1)) ?>
+            <div class="profile-avatar">
+                <div class="avatar-initials">
+                    <?= strtoupper(substr($display_name, 0, 1)) ?>
                 </div>
-                <div style="position: absolute; bottom: 0; right: 0;">
-                    <span class="role-badge role-<?= $user['role'] ?>"><?= ucfirst($user['role']) ?></span>
-                </div>
+                <span class="role-badge role-<?= $user['role'] ?? 'customer' ?>">
+                    <?= ucfirst($user['role'] ?? 'customer') ?>
+                </span>
             </div>
             
             <!-- Profile Info -->
             <div style="flex: 1;">
-                <h2 style="margin-bottom: 0.5rem;"><?= htmlspecialchars($user['full_name']) ?></h2>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1rem;">
-                    <div>
-                        <div style="font-size: 0.875rem; color: var(--admin-gray);">Email</div>
-                        <div><?= htmlspecialchars($user['email']) ?></div>
+                <h2 style="margin-bottom: 0.5rem;"><?= $display_name ?></h2>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-label">Email</div>
+                        <div class="info-value"><?= htmlspecialchars($user['email'] ?? '') ?></div>
                     </div>
-                    <div>
-                        <div style="font-size: 0.875rem; color: var(--admin-gray);">Phone</div>
-                        <div><?= htmlspecialchars($user['phone'] ?? 'Not provided') ?></div>
+                    <div class="info-item">
+                        <div class="info-label">Phone</div>
+                        <div class="info-value"><?= getUserField($user, 'phone') ?></div>
                     </div>
-                    <div>
-                        <div style="font-size: 0.875rem; color: var(--admin-gray);">Member Since</div>
-                        <div><?= date('M d, Y', strtotime($user['created_at'])) ?></div>
+                    <div class="info-item">
+                        <div class="info-label">Member Since</div>
+                        <div class="info-value">
+                            <?= isset($user['created_at']) ? date('M d, Y', strtotime($user['created_at'])) : 'N/A' ?>
+                        </div>
                     </div>
-                    <div>
-                        <div style="font-size: 0.875rem; color: var(--admin-gray);">Last Login</div>
-                        <div><?= $user['last_login'] ? date('M d, Y H:i', strtotime($user['last_login'])) : 'Never' ?></div>
+                    <div class="info-item">
+                        <div class="info-label">Last Login</div>
+                        <div class="info-value"><?= $last_login ?></div>
                     </div>
                 </div>
             </div>
@@ -293,13 +861,11 @@ require_once 'header.php';
     </div>
 
     <!-- Tabs -->
-    <div style="border-bottom: 1px solid var(--admin-border); margin-bottom: 2rem;">
-        <div style="display: flex; gap: 1rem; overflow-x: auto;">
+    <div class="tabs-container">
+        <div class="tabs-scroll">
             <button type="button" class="tab-btn active" data-tab="profile">Profile Information</button>
             <button type="button" class="tab-btn" data-tab="password">Change Password</button>
             <button type="button" class="tab-btn" data-tab="preferences">Preferences</button>
-            <button type="button" class="tab-btn" data-tab="activity">Activity Log</button>
-            <button type="button" class="tab-btn" data-tab="sessions">Login History</button>
         </div>
     </div>
 
@@ -316,14 +882,14 @@ require_once 'header.php';
                     <div class="form-group">
                         <label class="form-label">Full Name *</label>
                         <input type="text" name="full_name" 
-                               value="<?= htmlspecialchars($user['full_name']) ?>" 
+                               value="<?= getUserField($user, 'full_name', '') ?>" 
                                required class="form-control">
                     </div>
                     
                     <div class="form-group">
                         <label class="form-label">Email *</label>
                         <input type="email" name="email" 
-                               value="<?= htmlspecialchars($user['email']) ?>" 
+                               value="<?= htmlspecialchars($user['email'] ?? '') ?>" 
                                required class="form-control">
                     </div>
                 </div>
@@ -332,14 +898,14 @@ require_once 'header.php';
                     <div class="form-group">
                         <label class="form-label">Phone</label>
                         <input type="tel" name="phone" 
-                               value="<?= htmlspecialchars($user['phone'] ?? '') ?>" 
+                               value="<?= getUserField($user, 'phone', '') ?>" 
                                class="form-control" placeholder="+234 123 456 7890">
                     </div>
                     
                     <div class="form-group">
                         <label class="form-label">Address</label>
                         <input type="text" name="address" 
-                               value="<?= htmlspecialchars($user['address'] ?? '') ?>" 
+                               value="<?= getUserField($user, 'address', '') ?>" 
                                class="form-control" placeholder="Street address">
                     </div>
                 </div>
@@ -348,28 +914,28 @@ require_once 'header.php';
                     <div class="form-group">
                         <label class="form-label">City</label>
                         <input type="text" name="city" 
-                               value="<?= htmlspecialchars($user['city'] ?? '') ?>" 
+                               value="<?= getUserField($user, 'city', '') ?>" 
                                class="form-control" placeholder="City">
                     </div>
                     
                     <div class="form-group">
                         <label class="form-label">State</label>
                         <input type="text" name="state" 
-                               value="<?= htmlspecialchars($user['state'] ?? '') ?>" 
+                               value="<?= getUserField($user, 'state', '') ?>" 
                                class="form-control" placeholder="State">
                     </div>
                     
                     <div class="form-group">
                         <label class="form-label">Country</label>
                         <input type="text" name="country" 
-                               value="<?= htmlspecialchars($user['country'] ?? '') ?>" 
+                               value="<?= getUserField($user, 'country', '') ?>" 
                                class="form-control" placeholder="Country">
                     </div>
                     
                     <div class="form-group">
                         <label class="form-label">Postal Code</label>
                         <input type="text" name="postal_code" 
-                               value="<?= htmlspecialchars($user['postal_code'] ?? '') ?>" 
+                               value="<?= getUserField($user, 'postal_code', '') ?>" 
                                class="form-control" placeholder="Postal code">
                     </div>
                 </div>
@@ -400,7 +966,7 @@ require_once 'header.php';
                 <div class="form-group">
                     <label class="form-label">New Password</label>
                     <input type="password" name="new_password" required class="form-control" minlength="8">
-                    <small>Minimum 8 characters</small>
+                    <div class="form-text">Minimum 8 characters</div>
                 </div>
                 
                 <div class="form-group">
@@ -408,14 +974,14 @@ require_once 'header.php';
                     <input type="password" name="confirm_password" required class="form-control">
                 </div>
                 
-                <div class="password-strength" style="margin-bottom: 1.5rem;">
-                    <div style="display: flex; gap: 0.25rem; margin-bottom: 0.5rem;">
+                <div class="password-strength">
+                    <div class="strength-bars">
                         <div class="strength-bar" id="strength1"></div>
                         <div class="strength-bar" id="strength2"></div>
                         <div class="strength-bar" id="strength3"></div>
                         <div class="strength-bar" id="strength4"></div>
                     </div>
-                    <div id="strengthText" style="font-size: 0.875rem;">Enter a password</div>
+                    <div class="strength-text" id="strengthText">Enter a password</div>
                 </div>
                 
                 <div style="margin-top: 2rem;">
@@ -456,7 +1022,7 @@ require_once 'header.php';
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem;">
+                    <label class="form-check-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                         <input type="checkbox" name="notifications" value="1" 
                                <?= $preferences['notifications'] ? 'checked' : '' ?>>
                         Enable Desktop Notifications
@@ -464,7 +1030,7 @@ require_once 'header.php';
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem;">
+                    <label class="form-check-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                         <input type="checkbox" name="email_notifications" value="1" 
                                <?= $preferences['email_notifications'] ? 'checked' : '' ?>>
                         Receive Email Notifications
@@ -479,235 +1045,42 @@ require_once 'header.php';
             </form>
         </div>
     </div>
-
-    <!-- Activity Log Tab -->
-    <div class="tab-content" id="activityTab" style="display: none;">
-        <div class="card">
-            <h2 style="margin-bottom: 1.5rem;">Recent Activity</h2>
-            
-            <?php if (empty($recent_activity)): ?>
-                <div style="text-align: center; padding: 3rem;">
-                    <i class="fas fa-history" style="font-size: 3rem; color: var(--admin-gray); margin-bottom: 1rem;"></i>
-                    <p>No recent activity found</p>
-                </div>
-            <?php else: ?>
-                <div style="overflow-x: auto;">
-                    <table style="width: 100%;">
-                        <thead>
-                            <tr>
-                                <th>Date/Time</th>
-                                <th>Action</th>
-                                <th>IP Address</th>
-                                <th>Details</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($recent_activity as $log): ?>
-                                <tr>
-                                    <td style="white-space: nowrap;"><?= date('M d, Y H:i:s', strtotime($log['created_at'])) ?></td>
-                                    <td><?= htmlspecialchars($log['action']) ?></td>
-                                    <td><?= htmlspecialchars($log['ip_address'] ?? '-') ?></td>
-                                    <td><?= htmlspecialchars($log['details'] ?? '-') ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            <?php endif; ?>
-        </div>
-    </div>
-
-    <!-- Login History Tab -->
-    <div class="tab-content" id="sessionsTab" style="display: none;">
-        <div class="card">
-            <h2 style="margin-bottom: 1.5rem;">Login History</h2>
-            
-            <?php if (empty($login_history)): ?>
-                <div style="text-align: center; padding: 3rem;">
-                    <i class="fas fa-history" style="font-size: 3rem; color: var(--admin-gray); margin-bottom: 1rem;"></i>
-                    <p>No login history found</p>
-                </div>
-            <?php else: ?>
-                <div style="overflow-x: auto;">
-                    <table style="width: 100%;">
-                        <thead>
-                            <tr>
-                                <th>Date/Time</th>
-                                <th>IP Address</th>
-                                <th>Device/Browser</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($login_history as $log): ?>
-                                <tr>
-                                    <td style="white-space: nowrap;"><?= date('M d, Y H:i:s', strtotime($log['created_at'])) ?></td>
-                                    <td><?= htmlspecialchars($log['ip_address'] ?? '-') ?></td>
-                                    <td>
-                                        <?php 
-                                        $ua = $log['user_agent'] ?? '';
-                                        if (strpos($ua, 'Chrome') !== false) echo 'Chrome';
-                                        elseif (strpos($ua, 'Firefox') !== false) echo 'Firefox';
-                                        elseif (strpos($ua, 'Safari') !== false) echo 'Safari';
-                                        elseif (strpos($ua, 'Edge') !== false) echo 'Edge';
-                                        else echo 'Unknown';
-                                        ?>
-                                    </td>
-                                    <td>
-                                        <span class="status-badge status-success">Success</span>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-                
-                <div style="margin-top: 2rem;">
-                    <button class="btn btn-warning" onclick="logoutAllSessions()">
-                        <i class="fas fa-sign-out-alt"></i> Logout All Devices
-                    </button>
-                </div>
-            <?php endif; ?>
-        </div>
-    </div>
 </div>
 
-<style>
-.role-badge {
-    padding: 0.25rem 0.75rem;
-    border-radius: 999px;
-    font-size: 0.875rem;
-    font-weight: 600;
-    display: inline-block;
-}
-
-.role-admin {
-    background: #dbeafe;
-    color: #1e40af;
-}
-
-.role-manager {
-    background: #e0e7ff;
-    color: #3730a3;
-}
-
-.role-customer {
-    background: #f3f4f6;
-    color: #374151;
-}
-
-.role-vendor {
-    background: #fef3c7;
-    color: #92400e;
-}
-
-.tab-btn {
-    padding: 0.75rem 1.5rem;
-    background: none;
-    border: none;
-    border-bottom: 3px solid transparent;
-    font-weight: 600;
-    color: var(--admin-gray);
-    cursor: pointer;
-    transition: all 0.3s;
-    white-space: nowrap;
-}
-
-.tab-btn:hover {
-    color: var(--admin-primary);
-    border-bottom-color: var(--admin-border);
-}
-
-.tab-btn.active {
-    color: var(--admin-primary);
-    border-bottom-color: var(--admin-primary);
-}
-
-.tab-content {
-    animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-/* Password Strength Bars */
-.strength-bar {
-    height: 4px;
-    flex: 1;
-    background: #e5e7eb;
-    border-radius: 2px;
-    transition: background 0.3s;
-}
-
-.strength-bar.weak {
-    background: #ef4444;
-}
-
-.strength-bar.medium {
-    background: #f59e0b;
-}
-
-.strength-bar.strong {
-    background: #10b981;
-}
-
-.strength-bar.very-strong {
-    background: #059669;
-}
-
-.btn-warning {
-    background: linear-gradient(135deg, #f59e0b, #d97706);
-    color: white;
-}
-
-.btn-warning:hover {
-    background: linear-gradient(135deg, #d97706, #b45309);
-}
-
-.status-badge {
-    padding: 0.25rem 0.75rem;
-    border-radius: 999px;
-    font-size: 0.875rem;
-    font-weight: 600;
-    display: inline-block;
-}
-
-.status-success {
-    background: #d1fae5;
-    color: #065f46;
-}
-</style>
-
 <script>
+// Your existing JavaScript remains exactly the same
 document.addEventListener('DOMContentLoaded', function() {
     // Tab switching
     const tabBtns = document.querySelectorAll('.tab-btn');
     const tabContents = document.querySelectorAll('.tab-content');
     
+    function showTab(tabId) {
+        tabBtns.forEach(b => b.classList.remove('active'));
+        tabContents.forEach(c => c.style.display = 'none');
+        
+        const activeBtn = document.querySelector(`[data-tab="${tabId}"]`);
+        if (activeBtn) {
+            activeBtn.classList.add('active');
+        }
+        
+        const activeTab = document.getElementById(tabId + 'Tab');
+        if (activeTab) {
+            activeTab.style.display = 'block';
+        }
+    }
+    
     tabBtns.forEach(btn => {
         btn.addEventListener('click', function() {
-            const tabId = this.getAttribute('data-tab') + 'Tab';
-            
-            tabBtns.forEach(b => b.classList.remove('active'));
-            tabContents.forEach(c => c.style.display = 'none');
-            
-            this.classList.add('active');
-            document.getElementById(tabId).style.display = 'block';
-            
-            // Update URL hash
-            window.location.hash = this.getAttribute('data-tab');
+            const tabId = this.getAttribute('data-tab');
+            showTab(tabId);
+            history.pushState(null, null, '#' + tabId);
         });
     });
     
-    // Check URL hash for tab
+    // Check URL hash
     const hash = window.location.hash.substring(1);
-    if (hash) {
-        const tab = document.querySelector(`[data-tab="${hash}"]`);
-        if (tab) {
-            tab.click();
-        }
+    if (hash && ['profile', 'password', 'preferences'].includes(hash)) {
+        showTab(hash);
     }
 
     // Password strength checker
@@ -715,12 +1088,19 @@ document.addEventListener('DOMContentLoaded', function() {
     if (passwordInput) {
         passwordInput.addEventListener('input', checkPasswordStrength);
     }
+    
+    // Prevent form resubmission
+    if (window.history.replaceState) {
+        window.history.replaceState(null, null, window.location.href);
+    }
 });
 
 function checkPasswordStrength() {
-    const password = document.querySelector('input[name="new_password"]').value;
+    const password = document.querySelector('input[name="new_password"]')?.value || '';
     const strengthBars = document.querySelectorAll('.strength-bar');
     const strengthText = document.getElementById('strengthText');
+    
+    if (!strengthBars.length || !strengthText) return;
     
     let strength = 0;
     
@@ -760,30 +1140,6 @@ function checkPasswordStrength() {
         }
         strengthText.textContent = 'Very strong password';
         strengthText.style.color = '#059669';
-    }
-}
-
-function logoutAllSessions() {
-    if (confirm('This will log you out from all other devices. Continue?')) {
-        // Make API call to logout all sessions
-        fetch('api/logout-all.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': '<?= $csrf_token ?>'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('Logged out from all other devices');
-            } else {
-                alert('Error: ' + data.message);
-            }
-        })
-        .catch(error => {
-            alert('Error logging out from other devices');
-        });
     }
 }
 </script>

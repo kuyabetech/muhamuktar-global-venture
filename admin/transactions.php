@@ -7,7 +7,6 @@ require_once '../includes/db.php';
 require_once '../includes/functions.php';
 require_once '../includes/auth.php';
 
-
 // Admin only
 require_admin();
 
@@ -282,24 +281,32 @@ $count_stmt->execute($params);
 $total_transactions = $count_stmt->fetchColumn();
 $total_pages = ceil($total_transactions / $limit);
 
-// Fetch transactions
-$sql = "
-    SELECT t.*, 
-           o.order_number,
-           o.total_amount as order_total,
-           u.full_name as customer_name,
-           u.email as customer_email
-    FROM transactions t
-    LEFT JOIN orders o ON t.order_id = o.id
-    LEFT JOIN users u ON t.user_id = u.id
-    $where_sql
-    ORDER BY t.created_at DESC
-    LIMIT $limit OFFSET $offset
-";
-
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$transactions = $stmt->fetchAll();
+// Fetch transactions with error handling
+$transactions = [];
+try {
+    $sql = "
+        SELECT t.*, 
+               o.order_number,
+               o.total_amount as order_total,
+               u.full_name as customer_name,
+               u.email as customer_email
+        FROM transactions t
+        LEFT JOIN orders o ON t.order_id = o.id
+        LEFT JOIN users u ON t.user_id = u.id
+        $where_sql
+        ORDER BY t.created_at DESC
+        LIMIT $limit OFFSET $offset
+    ";
+    
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $transactions = $stmt->fetchAll();
+    
+} catch (Exception $e) {
+    error_log("Transactions query error: " . $e->getMessage());
+    echo "<div class='alert alert-danger'>Error loading transactions: " . htmlspecialchars($e->getMessage()) . "</div>";
+    $transactions = [];
+}
 
 // Get statistics
 $stats = [
@@ -384,41 +391,655 @@ function logActivity($user_id, $action) {
 require_once 'header.php';
 ?>
 
+<style>
+/* Base Admin Styles */
+.admin-main {
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* Responsive Typography */
+h1 { font-size: clamp(1.5rem, 4vw, 2rem); }
+h2 { font-size: clamp(1.25rem, 3vw, 1.5rem); }
+h3 { font-size: clamp(1.1rem, 2.5vw, 1.25rem); }
+
+/* Statistics Cards */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background: white;
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    border: 1px solid #e5e7eb;
+    transition: transform 0.3s;
+}
+
+.stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+}
+
+.stat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.stat-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #1f2937;
+    line-height: 1.2;
+}
+
+.stat-label {
+    color: #6b7280;
+    font-size: 0.9rem;
+    margin-top: 0.25rem;
+}
+
+.stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+}
+
+.stat-icon.primary { background: linear-gradient(135deg, #4f46e5, #6366f1); color: white; }
+.stat-icon.success { background: linear-gradient(135deg, #10b981, #34d399); color: white; }
+.stat-icon.warning { background: linear-gradient(135deg, #f59e0b, #fbbf24); color: white; }
+.stat-icon.info { background: linear-gradient(135deg, #3b82f6, #60a5fa); color: white; }
+
+/* Card Component */
+.card {
+    background: white;
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    border: 1px solid #e5e7eb;
+    margin-bottom: 2rem;
+}
+
+/* Status Badges */
+.status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    display: inline-block;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.status-success { background: #d1fae5; color: #065f46; }
+.status-pending { background: #fef3c7; color: #92400e; }
+.status-failed { background: #fee2e2; color: #991b1b; }
+.status-refunded { background: #f3f4f6; color: #374151; }
+.status-partial_refund { background: #e0e7ff; color: #3730a3; }
+
+/* Status Summary Cards */
+.status-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card-small {
+    display: block;
+    padding: 1rem;
+    border-radius: 12px;
+    text-decoration: none;
+    transition: transform 0.2s;
+}
+
+.stat-card-small:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+}
+
+.stat-card-small .count {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-top: 0.25rem;
+}
+
+/* Filter Section */
+.filter-section {
+    background: white;
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    border: 1px solid #e5e7eb;
+}
+
+.filter-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr auto;
+    gap: 1rem;
+}
+
+/* Table Styles */
+.table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 12px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1000px;
+}
+
+th {
+    text-align: left;
+    padding: 1rem;
+    background: #f9fafb;
+    color: #4b5563;
+    font-weight: 600;
+    font-size: 0.85rem;
+    border-bottom: 2px solid #e5e7eb;
+    white-space: nowrap;
+}
+
+td {
+    padding: 1rem;
+    border-bottom: 1px solid #e5e7eb;
+    color: #1f2937;
+    font-size: 0.9rem;
+}
+
+tr:hover {
+    background: #f9fafb;
+}
+
+/* Action Buttons */
+.action-buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.btn {
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #4f46e5, #6366f1);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #4338ca, #4f46e5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+.btn-secondary {
+    background: #6b7280;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #4b5563;
+    transform: translateY(-2px);
+}
+
+.btn-warning {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+}
+
+.btn-warning:hover {
+    background: linear-gradient(135deg, #d97706, #b45309);
+    transform: translateY(-2px);
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: white;
+}
+
+.btn-danger:hover {
+    background: linear-gradient(135deg, #dc2626, #b91c1c);
+    transform: translateY(-2px);
+}
+
+/* Alerts */
+.alert {
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.alert-success {
+    background: #d1fae5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+}
+
+.alert-danger {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+
+.alert-warning {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fde68a;
+}
+
+/* Detail View */
+.detail-row {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.detail-label {
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 0.25rem;
+}
+
+.detail-value {
+    color: #4b5563;
+}
+
+/* Modal */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    padding: 1rem;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 16px;
+    padding: clamp(1.5rem, 4vw, 2rem);
+    max-width: 500px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #6b7280;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s;
+}
+
+.modal-close:hover {
+    background: #f3f4f6;
+    color: #ef4444;
+}
+
+/* Form Elements */
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    transition: all 0.2s;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+/* Pagination */
+.pagination {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 2rem;
+    flex-wrap: wrap;
+}
+
+.page-link {
+    padding: 0.5rem 1rem;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    color: #4b5563;
+    text-decoration: none;
+    transition: all 0.2s;
+    min-width: 40px;
+    text-align: center;
+}
+
+.page-link:hover {
+    background: #f3f4f6;
+    border-color: #d1d5db;
+}
+
+.page-link.active {
+    background: #4f46e5;
+    color: white;
+    border-color: #4f46e5;
+}
+
+/* Charts */
+.chart-container {
+    height: 250px;
+    position: relative;
+}
+
+/* Mobile Menu Toggle */
+.mobile-menu-toggle {
+    display: none;
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: #4f46e5;
+    color: white;
+    border: none;
+    box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4);
+    z-index: 9999;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 1024px) {
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .filter-grid {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+    
+    .filter-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+    
+    .filter-actions .btn {
+        flex: 1;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 768px) {
+    .admin-main {
+        padding: 1rem;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .form-grid {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+    
+    .header-section {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    
+    .header-section > div:last-child {
+        width: 100%;
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .header-section .btn {
+        flex: 1;
+        text-align: center;
+    }
+    
+    .status-summary-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .stat-value {
+        font-size: 1.5rem;
+    }
+    
+    .card {
+        padding: 1rem;
+    }
+    
+    .table-responsive {
+        margin: 0 -1rem;
+        width: calc(100% + 2rem);
+        border-radius: 0;
+    }
+    
+    th, td {
+        padding: 0.75rem;
+    }
+    
+    .action-buttons {
+        flex-direction: column;
+    }
+    
+    .action-buttons .btn {
+        width: 100%;
+    }
+    
+    .mobile-menu-toggle {
+        display: flex;
+    }
+}
+
+@media (max-width: 480px) {
+    .admin-main {
+        padding: 0.75rem;
+    }
+    
+    .stats-grid {
+        gap: 0.75rem;
+    }
+    
+    .stat-card {
+        padding: 1rem;
+    }
+    
+    .stat-value {
+        font-size: 1.25rem;
+    }
+    
+    .status-summary-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .filter-section {
+        padding: 1rem;
+    }
+    
+    .filter-actions {
+        flex-direction: column;
+    }
+    
+    .filter-actions .btn {
+        width: 100%;
+    }
+    
+    .pagination {
+        gap: 0.25rem;
+    }
+    
+    .page-link {
+        padding: 0.5rem 0.75rem;
+        min-width: 36px;
+        font-size: 0.85rem;
+    }
+    
+    .modal-content {
+        padding: 1rem;
+    }
+    
+    .btn {
+        padding: 0.75rem 1rem;
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* Chart Responsive */
+.chart-container {
+    height: 250px;
+}
+
+@media (max-width: 768px) {
+    .chart-container {
+        height: 200px;
+    }
+    
+    [style*="grid-template-columns: 2fr 1fr"] {
+        grid-template-columns: 1fr !important;
+        gap: 1rem !important;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .btn, .action-buttons, .filter-section, .pagination, .mobile-menu-toggle {
+        display: none !important;
+    }
+    
+    .card {
+        box-shadow: none;
+        border: 1px solid #000;
+    }
+    
+    table {
+        border-collapse: collapse;
+    }
+    
+    th, td {
+        border: 1px solid #000;
+    }
+}
+</style>
+
 <div class="admin-main">
     
+    <!-- Mobile Menu Toggle -->
+  <!--  <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
+        <i class="fas fa-bars"></i>
+    </button> -->
+
     <!-- Page Header -->
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <div class="header-section" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
         <div>
-            <h1 style="font-size: 2rem; margin-bottom: 0.5rem; color: var(--admin-dark);">
+            <h1 style="margin-bottom: 0.5rem;">
                 <i class="fas fa-credit-card"></i> Transactions
             </h1>
             <p style="color: var(--admin-gray);">View and manage payment transactions</p>
         </div>
-        <div>
+        <div style="display: flex; gap: 0.5rem;">
             <a href="?action=add" class="btn btn-primary">
-                <i class="fas fa-plus"></i> Manual Entry
+                <i class="fas fa-plus"></i> <span class="hide-mobile">Manual Entry</span>
             </a>
             <a href="?export=1" class="btn btn-secondary">
-                <i class="fas fa-download"></i> Export
+                <i class="fas fa-download"></i> <span class="hide-mobile">Export</span>
             </a>
         </div>
     </div>
 
     <!-- Messages -->
     <?php if (!empty($success_msg)): ?>
-        <div class="alert alert-success"><?= htmlspecialchars($success_msg) ?></div>
+        <div class="alert alert-success">
+            <i class="fas fa-check-circle"></i> <?= htmlspecialchars($success_msg) ?>
+        </div>
     <?php endif; ?>
     <?php if (!empty($error_msg)): ?>
-        <div class="alert alert-danger"><?= htmlspecialchars($error_msg) ?></div>
+        <div class="alert alert-danger">
+            <i class="fas fa-exclamation-circle"></i> <?= htmlspecialchars($error_msg) ?>
+        </div>
     <?php endif; ?>
 
     <?php if ($action === 'view' && $transaction_details): ?>
         <!-- Transaction Details View -->
         <div class="card">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
                 <h2>
                     <i class="fas fa-receipt"></i> 
-                    Transaction #<?= htmlspecialchars($transaction_details['transaction_id']) ?>
+                    Transaction Details
                 </h2>
                 <a href="transactions.php" class="btn btn-secondary">
                     <i class="fas fa-arrow-left"></i> Back to List
@@ -561,13 +1182,15 @@ require_once 'header.php';
                         <div style="background: var(--admin-light); padding: 1.5rem; border-radius: 8px;">
                             <h3 style="margin-bottom: 1rem;">Actions</h3>
                             
-                            <button class="btn btn-warning" onclick="showRefundModal(<?= $transaction_details['id'] ?>, <?= $transaction_details['amount'] ?>)">
-                                <i class="fas fa-undo"></i> Process Refund
-                            </button>
-                            
-                            <button class="btn btn-secondary" onclick="printReceipt()">
-                                <i class="fas fa-print"></i> Print Receipt
-                            </button>
+                            <div class="action-buttons">
+                                <button class="btn btn-warning" onclick="showRefundModal(<?= $transaction_details['id'] ?>, <?= $transaction_details['amount'] ?>)">
+                                    <i class="fas fa-undo"></i> Process Refund
+                                </button>
+                                
+                                <button class="btn btn-secondary" onclick="printReceipt()">
+                                    <i class="fas fa-print"></i> Print Receipt
+                                </button>
+                            </div>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -642,7 +1265,7 @@ require_once 'header.php';
                     </div>
                 </div>
                 
-                <div style="margin-top: 2rem;">
+                <div style="margin-top: 2rem; display: flex; gap: 1rem; flex-wrap: wrap;">
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-save"></i> Add Transaction
                     </button>
@@ -653,7 +1276,7 @@ require_once 'header.php';
 
     <?php else: ?>
         <!-- Statistics Cards -->
-        <div class="stats-grid" style="margin-bottom: 2rem;">
+        <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-header">
                     <div>
@@ -703,7 +1326,7 @@ require_once 'header.php';
             <!-- Transactions Chart -->
             <div class="card">
                 <h3 style="margin-bottom: 1.5rem;">Transaction Volume (Last 7 Days)</h3>
-                <div style="height: 250px;" id="transactionChart"></div>
+                <div class="chart-container" id="transactionChart"></div>
             </div>
 
             <!-- Payment Methods Breakdown -->
@@ -725,7 +1348,7 @@ require_once 'header.php';
         </div>
 
         <!-- Status Summary -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+        <div class="status-summary-grid">
             <a href="?status=success" class="stat-card-small" style="background: #d1fae5; color: #065f46;">
                 <div>Successful</div>
                 <div class="count"><?= number_format($stats['successful'] ?? 0) ?></div>
@@ -745,9 +1368,9 @@ require_once 'header.php';
         </div>
 
         <!-- Filters -->
-        <div class="card" style="margin-bottom: 2rem;">
+        <div class="filter-section">
             <form method="get" id="filterForm">
-                <div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 1rem;">
+                <div class="filter-grid">
                     <div>
                         <label class="form-label">Search</label>
                         <input type="text" name="search" value="<?= htmlspecialchars($search) ?>" 
@@ -776,7 +1399,7 @@ require_once 'header.php';
                         <input type="date" name="date_to" value="<?= htmlspecialchars($date_to) ?>" class="form-control">
                     </div>
 
-                    <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
+                    <div class="filter-actions" style="display: flex; gap: 0.5rem; align-items: flex-end;">
                         <button type="submit" class="btn btn-primary">
                             <i class="fas fa-filter"></i> Filter
                         </button>
@@ -790,8 +1413,8 @@ require_once 'header.php';
 
         <!-- Transactions Table -->
         <div class="card">
-            <div style="overflow-x: auto;">
-                <table style="width: 100%;">
+            <div class="table-responsive">
+                <table>
                     <thead>
                         <tr>
                             <th>Transaction ID</th>
@@ -817,7 +1440,7 @@ require_once 'header.php';
                             <?php foreach ($transactions as $t): ?>
                                 <tr>
                                     <td>
-                                        <code><?= htmlspecialchars(substr($t['transaction_id'], 0, 20)) ?>...</code>
+                                        <code><?= htmlspecialchars(substr($t['transaction_id'], 0, 15)) ?>...</code>
                                     </td>
                                     <td style="white-space: nowrap;"><?= date('M d, Y H:i', strtotime($t['created_at'])) ?></td>
                                     <td>
@@ -853,7 +1476,7 @@ require_once 'header.php';
                                         </span>
                                     </td>
                                     <td>
-                                        <code><?= htmlspecialchars(substr($t['reference'] ?? '', 0, 10)) ?>...</code>
+                                        <code><?= htmlspecialchars(substr($t['reference'] ?? '', 0, 8)) ?>...</code>
                                     </td>
                                     <td>
                                         <div class="action-buttons">
@@ -877,7 +1500,7 @@ require_once 'header.php';
 
             <!-- Pagination -->
             <?php if ($total_pages > 1): ?>
-                <div class="pagination" style="margin-top: 2rem;">
+                <div class="pagination">
                     <?php if ($page > 1): ?>
                         <a href="?page=1&status=<?= urlencode($status_filter) ?>&date_from=<?= urlencode($date_from) ?>&date_to=<?= urlencode($date_to) ?>&search=<?= urlencode($search) ?>" 
                            class="page-link"><i class="fas fa-angle-double-left"></i></a>
@@ -903,7 +1526,7 @@ require_once 'header.php';
 
     <!-- Refund Modal -->
     <div class="modal" id="refundModal" style="display: none;">
-        <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-content">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
                 <h2>Process Refund</h2>
                 <button class="modal-close" onclick="closeRefundModal()">&times;</button>
@@ -938,7 +1561,7 @@ require_once 'header.php';
                     <strong>Warning:</strong> Refunds cannot be undone automatically. Make sure you have confirmed with the customer.
                 </div>
                 
-                <div style="margin-top: 2rem; display: flex; gap: 1rem;">
+                <div style="margin-top: 2rem; display: flex; gap: 1rem; flex-wrap: wrap;">
                     <button type="submit" class="btn btn-danger" onclick="return confirmRefund()">
                         <i class="fas fa-undo"></i> Process Refund
                     </button>
@@ -952,131 +1575,6 @@ require_once 'header.php';
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<style>
-.status-badge {
-    padding: 0.25rem 0.75rem;
-    border-radius: 999px;
-    font-size: 0.875rem;
-    font-weight: 600;
-    display: inline-block;
-}
-
-.status-success {
-    background: #d1fae5;
-    color: #065f46;
-}
-
-.status-pending {
-    background: #fef3c7;
-    color: #92400e;
-}
-
-.status-failed {
-    background: #fee2e2;
-    color: #991b1b;
-}
-
-.status-refunded {
-    background: #f3f4f6;
-    color: #374151;
-}
-
-.status-partial_refund {
-    background: #e0e7ff;
-    color: #3730a3;
-}
-
-.stat-card-small {
-    display: block;
-    padding: 1rem;
-    border-radius: 8px;
-    text-decoration: none;
-    transition: transform 0.2s;
-}
-
-.stat-card-small:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
-}
-
-.stat-card-small .count {
-    font-size: 1.5rem;
-    font-weight: 700;
-    margin-top: 0.25rem;
-}
-
-.stat-icon.info {
-    background: linear-gradient(135deg, #3b82f6, #2563eb);
-    color: white;
-}
-
-.detail-row {
-    padding: 0.75rem 0;
-    border-bottom: 1px solid var(--admin-border);
-}
-
-.detail-label {
-    font-weight: 600;
-    color: var(--admin-dark);
-    margin-bottom: 0.25rem;
-}
-
-.detail-value {
-    color: var(--admin-gray);
-}
-
-.btn-sm {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.875rem;
-}
-
-.btn-warning {
-    background: linear-gradient(135deg, #f59e0b, #d97706);
-    color: white;
-}
-
-.btn-warning:hover {
-    background: linear-gradient(135deg, #d97706, #b45309);
-}
-
-/* Modal */
-.modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10000;
-}
-
-.modal-content {
-    background: white;
-    border-radius: 12px;
-    padding: 2rem;
-    max-width: 500px;
-    width: 90%;
-    max-height: 80vh;
-    overflow-y: auto;
-    position: relative;
-}
-
-.modal-close {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    cursor: pointer;
-    color: var(--admin-gray);
-}
-
-.modal-close:hover {
-    color: var(--admin-danger);
-}
-</style>
-
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize charts
@@ -1085,8 +1583,11 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function initTransactionChart() {
+    const container = document.getElementById('transactionChart');
+    if (!container) return;
+    
     const ctx = document.createElement('canvas');
-    document.getElementById('transactionChart').appendChild(ctx);
+    container.appendChild(ctx);
     
     new Chart(ctx, {
         type: 'bar',
@@ -1115,7 +1616,11 @@ function initTransactionChart() {
             plugins: {
                 legend: {
                     display: true,
-                    position: 'top'
+                    position: 'top',
+                    labels: {
+                        boxWidth: 12,
+                        font: { size: 11 }
+                    }
                 }
             },
             scales: {
@@ -1124,6 +1629,9 @@ function initTransactionChart() {
                     position: 'left',
                     grid: {
                         color: 'rgba(0, 0, 0, 0.05)'
+                    },
+                    ticks: {
+                        font: { size: 10 }
                     }
                 },
                 'y-amount': {
@@ -1134,8 +1642,9 @@ function initTransactionChart() {
                     },
                     ticks: {
                         callback: function(value) {
-                            return '₦' + value.toLocaleString();
-                        }
+                            return '₦' + (value / 1000) + 'k';
+                        },
+                        font: { size: 10 }
                     }
                 }
             }
@@ -1144,8 +1653,11 @@ function initTransactionChart() {
 }
 
 function initMethodsChart() {
+    const container = document.getElementById('methodsChart');
+    if (!container) return;
+    
     const ctx = document.createElement('canvas');
-    document.getElementById('methodsChart').appendChild(ctx);
+    container.appendChild(ctx);
     
     new Chart(ctx, {
         type: 'doughnut',
@@ -1153,7 +1665,7 @@ function initMethodsChart() {
             labels: <?= json_encode(array_column($methods, 'payment_method')) ?>,
             datasets: [{
                 data: <?= json_encode(array_column($methods, 'count')) ?>,
-                backgroundColor: ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'],
+                backgroundColor: ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'],
                 borderWidth: 0
             }]
         },
@@ -1203,11 +1715,45 @@ function printReceipt() {
     window.print();
 }
 
+function toggleMobileMenu() {
+    // Implement mobile menu toggle functionality
+    const sidebar = document.querySelector('.admin-sidebar');
+    if (sidebar) {
+        sidebar.classList.toggle('show');
+    }
+}
+
 // Close modal on ESC
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         closeRefundModal();
     }
 });
-</script>
 
+// Handle responsive table
+function makeTableResponsive() {
+    const tables = document.querySelectorAll('table');
+    tables.forEach(table => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'table-responsive';
+        table.parentNode.insertBefore(wrapper, table);
+        wrapper.appendChild(table);
+    });
+}
+
+// Handle mobile view adjustments
+function handleMobileView() {
+    if (window.innerWidth <= 768) {
+        document.querySelectorAll('.hide-mobile').forEach(el => {
+            el.style.display = 'none';
+        });
+    } else {
+        document.querySelectorAll('.hide-mobile').forEach(el => {
+            el.style.display = '';
+        });
+    }
+}
+
+window.addEventListener('load', handleMobileView);
+window.addEventListener('resize', handleMobileView);
+</script>

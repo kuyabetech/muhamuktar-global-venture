@@ -144,31 +144,559 @@ $summary['streak'] = (int)$stmt->fetchColumn();
 require_once 'header.php';
 ?>
 
+<style>
+/* Base Admin Styles */
+.admin-main {
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* Responsive Typography */
+h1 { font-size: clamp(1.8rem, 4vw, 2rem); }
+h2 { font-size: clamp(1.3rem, 3vw, 1.5rem); }
+h3 { font-size: clamp(1.1rem, 2.5vw, 1.25rem); }
+
+/* Statistics Cards */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background: white;
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    border: 1px solid #e5e7eb;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+}
+
+.stat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.stat-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #1f2937;
+    line-height: 1.2;
+}
+
+.stat-label {
+    color: #6b7280;
+    font-size: 0.9rem;
+    margin-top: 0.25rem;
+}
+
+.stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+}
+
+.stat-icon.primary { background: linear-gradient(135deg, #4f46e5, #6366f1); color: white; }
+.stat-icon.success { background: linear-gradient(135deg, #10b981, #34d399); color: white; }
+.stat-icon.warning { background: linear-gradient(135deg, #f59e0b, #fbbf24); color: white; }
+.stat-icon.info { background: linear-gradient(135deg, #3b82f6, #60a5fa); color: white; }
+
+/* Card Component */
+.card {
+    background: white;
+    border-radius: 16px;
+    padding: 2rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    border: 1px solid #e5e7eb;
+    margin-bottom: 2rem;
+    transition: box-shadow 0.3s;
+}
+
+.card:hover {
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+}
+
+/* Alerts */
+.alert {
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    animation: slideIn 0.3s ease;
+}
+
+.alert-success {
+    background: #d1fae5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+}
+
+.alert-danger {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(-100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* Form Elements */
+.form-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #1f2937;
+    font-size: 0.95rem;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    font-size: 0.95rem;
+    transition: all 0.3s;
+    background: white;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.form-control:hover {
+    border-color: #9ca3af;
+}
+
+/* Buttons */
+.btn {
+    padding: 0.75rem 1.5rem;
+    border-radius: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    border: none;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    white-space: nowrap;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #4f46e5, #6366f1);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #4338ca, #4f46e5);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(79, 70, 229, 0.3);
+}
+
+.btn-secondary {
+    background: #6b7280;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #4b5563;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(75, 85, 99, 0.3);
+}
+
+/* Table Styles */
+.table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 12px;
+    margin: 1rem 0;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 800px;
+}
+
+th {
+    text-align: left;
+    padding: 1rem;
+    background: #f9fafb;
+    color: #4b5563;
+    font-weight: 600;
+    font-size: 0.85rem;
+    border-bottom: 2px solid #e5e7eb;
+    white-space: nowrap;
+}
+
+td {
+    padding: 1rem;
+    border-bottom: 1px solid #e5e7eb;
+    color: #1f2937;
+    font-size: 0.9rem;
+}
+
+tr:hover {
+    background: #f9fafb;
+}
+
+/* Browser Icons */
+.fa-chrome, .fa-firefox, .fa-safari, .fa-edge, .fa-internet-explorer {
+    margin-right: 0.5rem;
+    font-size: 1.1rem;
+}
+
+/* Pagination */
+.pagination {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 2rem;
+    flex-wrap: wrap;
+}
+
+.page-link {
+    padding: 0.5rem 1rem;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    color: #4b5563;
+    text-decoration: none;
+    transition: all 0.2s;
+    min-width: 40px;
+    text-align: center;
+}
+
+.page-link:hover {
+    background: #f3f4f6;
+    border-color: #d1d5db;
+    transform: translateY(-2px);
+}
+
+.page-link.active {
+    background: #4f46e5;
+    color: white;
+    border-color: #4f46e5;
+}
+
+/* Summary Grid */
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.summary-item {
+    background: #f9fafb;
+    padding: 1rem;
+    border-radius: 10px;
+    transition: transform 0.2s;
+}
+
+.summary-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.summary-label {
+    font-size: 0.8rem;
+    color: #6b7280;
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.summary-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+/* Filter Section */
+.filter-section {
+    background: white;
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    border: 1px solid #e5e7eb;
+}
+
+.filter-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr auto;
+    gap: 1rem;
+    align-items: end;
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 1024px) {
+    .admin-main {
+        padding: 1.5rem;
+    }
+    
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+    
+    .filter-grid {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+    
+    .filter-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .filter-actions .btn {
+        flex: 1;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 768px) {
+    .admin-main {
+        padding: 1rem;
+    }
+    
+    .card {
+        padding: 1.25rem;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+    
+    .stat-card {
+        padding: 1.25rem;
+    }
+    
+    .stat-value {
+        font-size: 1.5rem;
+    }
+    
+    .page-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    
+    .page-header .btn {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .table-responsive {
+        margin: 0 -1rem;
+        width: calc(100% + 2rem);
+        border-radius: 0;
+    }
+    
+    th, td {
+        padding: 0.75rem;
+    }
+    
+    .summary-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 480px) {
+    .admin-main {
+        padding: 0.75rem;
+    }
+    
+    .card {
+        padding: 1rem;
+        border-radius: 12px;
+    }
+    
+    h1 {
+        font-size: 1.5rem;
+    }
+    
+    .stat-card {
+        padding: 1rem;
+    }
+    
+    .stat-value {
+        font-size: 1.25rem;
+    }
+    
+    .stat-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 1.2rem;
+    }
+    
+    .form-label {
+        font-size: 0.9rem;
+    }
+    
+    .form-control {
+        padding: 0.6rem 0.75rem;
+    }
+    
+    .btn {
+        padding: 0.6rem 1rem;
+        font-size: 0.9rem;
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .filter-actions {
+        flex-direction: column;
+    }
+    
+    .summary-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .pagination {
+        gap: 0.25rem;
+    }
+    
+    .page-link {
+        padding: 0.5rem 0.75rem;
+        min-width: 36px;
+        font-size: 0.85rem;
+    }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .stat-card, .card {
+        background: #1f2937;
+        border-color: #374151;
+    }
+    
+    .stat-value {
+        color: #f3f4f6;
+    }
+    
+    .stat-label {
+        color: #9ca3af;
+    }
+    
+    .form-control {
+        background: #374151;
+        border-color: #4b5563;
+        color: #f3f4f6;
+    }
+    
+    table {
+        background: #1f2937;
+    }
+    
+    th {
+        background: #374151;
+        color: #e5e7eb;
+    }
+    
+    td {
+        color: #d1d5db;
+    }
+    
+    tr:hover {
+        background: #374151;
+    }
+    
+    .summary-item {
+        background: #374151;
+    }
+    
+    .summary-label {
+        color: #9ca3af;
+    }
+    
+    .summary-value {
+        color: #f3f4f6;
+    }
+    
+    .page-link {
+        background: #374151;
+        border-color: #4b5563;
+        color: #d1d5db;
+    }
+    
+    .page-link:hover {
+        background: #4b5563;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .btn, .filter-section, .pagination {
+        display: none !important;
+    }
+    
+    .card {
+        box-shadow: none;
+        border: 1px solid #000;
+    }
+    
+    table {
+        border-collapse: collapse;
+    }
+    
+    th, td {
+        border: 1px solid #000;
+    }
+}
+</style>
+
 <div class="admin-main">
     
     <!-- Page Header -->
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
         <div>
-            <h1 style="font-size: 2rem; margin-bottom: 0.5rem; color: var(--admin-dark);">
+            <h1 style="margin-bottom: 0.5rem;">
                 <i class="fas fa-history"></i> My Activity Log
             </h1>
-            <p style="color: var(--admin-gray);">Track your personal activity and login history</p>
+            <p style="color: #6b7280;">Track your personal activity and login history</p>
         </div>
         <a href="?export=1" class="btn btn-secondary">
-            <i class="fas fa-download"></i> Export
+            <i class="fas fa-download"></i> <span class="hide-mobile">Export</span>
         </a>
     </div>
 
     <!-- Messages -->
     <?php if (!empty($success_msg)): ?>
-        <div class="alert alert-success"><?= htmlspecialchars($success_msg) ?></div>
+        <div class="alert alert-success">
+            <i class="fas fa-check-circle"></i> <?= htmlspecialchars($success_msg) ?>
+        </div>
     <?php endif; ?>
     <?php if (!empty($error_msg)): ?>
-        <div class="alert alert-danger"><?= htmlspecialchars($error_msg) ?></div>
+        <div class="alert alert-danger">
+            <i class="fas fa-exclamation-circle"></i> <?= htmlspecialchars($error_msg) ?>
+        </div>
     <?php endif; ?>
 
     <!-- Statistics Cards -->
-    <div class="stats-grid" style="margin-bottom: 2rem;">
+    <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-header">
                 <div>
@@ -211,9 +739,9 @@ require_once 'header.php';
     </div>
 
     <!-- Filters -->
-    <div class="card" style="margin-bottom: 2rem;">
+    <div class="filter-section">
         <form method="get" id="filterForm">
-            <div style="display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 1rem; align-items: end;">
+            <div class="filter-grid">
                 <div>
                     <label class="form-label">Search</label>
                     <input type="text" name="search" value="<?= htmlspecialchars($search) ?>" 
@@ -230,7 +758,7 @@ require_once 'header.php';
                     <input type="date" name="date_to" value="<?= htmlspecialchars($date_to) ?>" class="form-control">
                 </div>
 
-                <div style="display: flex; gap: 0.5rem;">
+                <div class="filter-actions">
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-filter"></i> Filter
                     </button>
@@ -244,8 +772,8 @@ require_once 'header.php';
 
     <!-- Activity Table -->
     <div class="card">
-        <div style="overflow-x: auto;">
-            <table style="width: 100%;">
+        <div class="table-responsive">
+            <table>
                 <thead>
                     <tr>
                         <th>Date/Time</th>
@@ -258,8 +786,8 @@ require_once 'header.php';
                 <tbody>
                     <?php if (empty($logs)): ?>
                         <tr>
-                            <td colspan="5" style="text-align: center; padding: 3rem;">
-                                <i class="fas fa-history" style="font-size: 3rem; color: var(--admin-gray); margin-bottom: 1rem; display: block;"></i>
+                            <td colspan="5" class="empty-state" style="text-align: center; padding: 3rem;">
+                                <i class="fas fa-history" style="font-size: 3rem; color: #9ca3af; margin-bottom: 1rem; display: block;"></i>
                                 No activity found
                             </td>
                         </tr>
@@ -296,12 +824,12 @@ require_once 'header.php';
 
         <!-- Pagination -->
         <?php if ($total_pages > 1): ?>
-            <div class="pagination" style="margin-top: 2rem;">
+            <div class="pagination">
                 <?php if ($page > 1): ?>
                     <a href="?page=1&date_from=<?= urlencode($date_from) ?>&date_to=<?= urlencode($date_to) ?>&search=<?= urlencode($search) ?>" 
-                       class="page-link"><i class="fas fa-angle-double-left"></i></a>
+                       class="page-link" title="First Page"><i class="fas fa-angle-double-left"></i></a>
                     <a href="?page=<?= $page - 1 ?>&date_from=<?= urlencode($date_from) ?>&date_to=<?= urlencode($date_to) ?>&search=<?= urlencode($search) ?>" 
-                       class="page-link"><i class="fas fa-angle-left"></i></a>
+                       class="page-link" title="Previous Page"><i class="fas fa-angle-left"></i></a>
                 <?php endif; ?>
 
                 <?php for ($i = max(1, $page - 2); $i <= min($total_pages, $page + 2); $i++): ?>
@@ -311,78 +839,86 @@ require_once 'header.php';
 
                 <?php if ($page < $total_pages): ?>
                     <a href="?page=<?= $page + 1 ?>&date_from=<?= urlencode($date_from) ?>&date_to=<?= urlencode($date_to) ?>&search=<?= urlencode($search) ?>" 
-                       class="page-link"><i class="fas fa-angle-right"></i></a>
+                       class="page-link" title="Next Page"><i class="fas fa-angle-right"></i></a>
                     <a href="?page=<?= $total_pages ?>&date_from=<?= urlencode($date_from) ?>&date_to=<?= urlencode($date_to) ?>&search=<?= urlencode($search) ?>" 
-                       class="page-link"><i class="fas fa-angle-double-right"></i></a>
+                       class="page-link" title="Last Page"><i class="fas fa-angle-double-right"></i></a>
                 <?php endif; ?>
             </div>
         <?php endif; ?>
     </div>
 
     <!-- Summary Card -->
-<div class="card" style="margin-top: 2rem;">
-    <h3 style="margin-bottom: 1rem;">Activity Summary</h3>
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-        <div style="background: var(--admin-light); padding: 1rem; border-radius: 8px;">
-            <div style="font-size: 0.875rem; color: var(--admin-gray);">Most Active Day</div>
-            <div style="font-size: 1.25rem; font-weight: 600;">
-                <?= htmlspecialchars($summary['most_active_day'] ?? 'N/A') ?>
+    <div class="card">
+        <h3 style="margin-bottom: 1rem;">Activity Summary</h3>
+        <div class="summary-grid">
+            <div class="summary-item">
+                <div class="summary-label">Most Active Day</div>
+                <div class="summary-value"><?= htmlspecialchars($summary['most_active_day'] ?? 'N/A') ?></div>
             </div>
-        </div>
 
-        <div style="background: var(--admin-light); padding: 1rem; border-radius: 8px;">
-            <div style="font-size: 0.875rem; color: var(--admin-gray);">Most Common Action</div>
-            <div style="font-size: 1.25rem; font-weight: 600;">
-                <?= htmlspecialchars($summary['most_common_action'] ?? 'N/A') ?>
+            <div class="summary-item">
+                <div class="summary-label">Most Common Action</div>
+                <div class="summary-value"><?= htmlspecialchars($summary['most_common_action'] ?? 'N/A') ?></div>
             </div>
-        </div>
 
-        <div style="background: var(--admin-light); padding: 1rem; border-radius: 8px;">
-            <div style="font-size: 0.875rem; color: var(--admin-gray);">First Activity</div>
-            <div style="font-size: 1.25rem; font-weight: 600;">
-                <?= htmlspecialchars($summary['first_activity'] ?? 'N/A') ?>
+            <div class="summary-item">
+                <div class="summary-label">First Activity</div>
+                <div class="summary-value"><?= htmlspecialchars($summary['first_activity'] ?? 'N/A') ?></div>
             </div>
-        </div>
 
-        <div style="background: var(--admin-light); padding: 1rem; border-radius: 8px;">
-            <div style="font-size: 0.875rem; color: var(--admin-gray);">Activity Streak</div>
-            <div style="font-size: 1.25rem; font-weight: 600;">
-                <?= isset($summary['streak']) ? $summary['streak'] . ' days (last 30)' : 'N/A' ?>
+            <div class="summary-item">
+                <div class="summary-label">Activity Streak</div>
+                <div class="summary-value">
+                    <?= isset($summary['streak']) ? $summary['streak'] . ' days (last 30)' : 'N/A' ?>
+                </div>
             </div>
         </div>
     </div>
 </div>
-</div>
 
-<style>
-.stat-icon.info {
-    background: linear-gradient(135deg, #3b82f6, #2563eb);
-    color: white;
-}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Make table responsive
+    const tables = document.querySelectorAll('table');
+    tables.forEach(table => {
+        if (!table.parentNode.classList.contains('table-responsive')) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'table-responsive';
+            table.parentNode.insertBefore(wrapper, table);
+            wrapper.appendChild(table);
+        }
+    });
 
-.tab-btn {
-    padding: 0.75rem 1.5rem;
-    background: none;
-    border: none;
-    border-bottom: 3px solid transparent;
-    font-weight: 600;
-    color: var(--admin-gray);
-    cursor: pointer;
-    transition: all 0.3s;
-}
+    // Handle mobile view adjustments
+    function handleMobileView() {
+        const hideMobile = document.querySelectorAll('.hide-mobile');
+        if (window.innerWidth <= 768) {
+            hideMobile.forEach(el => el.style.display = 'none');
+        } else {
+            hideMobile.forEach(el => el.style.display = '');
+        }
+    }
 
-.tab-btn:hover {
-    color: var(--admin-primary);
-    border-bottom-color: var(--admin-border);
-}
+    handleMobileView();
+    
+    let resizeTimer;
+    window.addEventListener('resize', function() {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(handleMobileView, 250);
+    });
 
-.tab-btn.active {
-    color: var(--admin-primary);
-    border-bottom-color: var(--admin-primary);
-}
+    // Prevent form resubmission on refresh
+    if (window.history.replaceState) {
+        window.history.replaceState(null, null, window.location.href);
+    }
 
-.fa-chrome, .fa-firefox, .fa-safari, .fa-edge, .fa-internet-explorer {
-    margin-right: 0.5rem;
-}
-</style>
+    // Auto-submit filter when date changes (optional)
+    const dateInputs = document.querySelectorAll('input[type="date"]');
+    dateInputs.forEach(input => {
+        input.addEventListener('change', function() {
+            document.getElementById('filterForm').submit();
+        });
+    });
+});
+</script>
 

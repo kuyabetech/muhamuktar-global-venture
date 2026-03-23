@@ -7,7 +7,6 @@ require_once '../includes/db.php';
 require_once '../includes/functions.php';
 require_once '../includes/auth.php';
 
-
 // Admin only
 require_admin();
 
@@ -518,28 +517,661 @@ function formatBytes($bytes, $precision = 2) {
 require_once 'header.php';
 ?>
 
-<div class="admin-main">
+<style>
+/* Base Admin Styles */
+.admin-main {
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* Responsive Typography */
+h1 { font-size: clamp(1.8rem, 4vw, 2rem); }
+h2 { font-size: clamp(1.3rem, 3vw, 1.5rem); }
+h3 { font-size: clamp(1.1rem, 2.5vw, 1.25rem); }
+
+/* Page Header */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+    background: white;
+    padding: 1.5rem 2rem;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    border: 1px solid #e5e7eb;
+}
+
+.page-header h1 {
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* Statistics Cards */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background: white;
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    border: 1px solid #e5e7eb;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+}
+
+.stat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.stat-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #1f2937;
+    line-height: 1.2;
+}
+
+.stat-label {
+    color: #6b7280;
+    font-size: 0.9rem;
+    margin-top: 0.25rem;
+}
+
+.stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+}
+
+.stat-icon.primary { background: linear-gradient(135deg, #4f46e5, #6366f1); color: white; }
+.stat-icon.success { background: linear-gradient(135deg, #10b981, #34d399); color: white; }
+.stat-icon.warning { background: linear-gradient(135deg, #f59e0b, #fbbf24); color: white; }
+.stat-icon.info { background: linear-gradient(135deg, #3b82f6, #60a5fa); color: white; }
+
+/* Alerts */
+.alert {
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    animation: slideIn 0.3s ease;
+}
+
+.alert-success {
+    background: #d1fae5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+}
+
+.alert-danger {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+
+.alert-warning {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fde68a;
+}
+
+.alert-info {
+    background: #dbeafe;
+    color: #1e40af;
+    border: 1px solid #bfdbfe;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(-100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* Card Component */
+.card {
+    background: white;
+    border-radius: 16px;
+    padding: 2rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    border: 1px solid #e5e7eb;
+    margin-bottom: 2rem;
+}
+
+/* Tabs */
+.tabs-container {
+    border-bottom: 1px solid #e5e7eb;
+    margin-bottom: 2rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.tabs-scroll {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0 0.5rem;
+}
+
+.tab-btn {
+    padding: 0.75rem 1.5rem;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    font-weight: 600;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all 0.3s;
+    white-space: nowrap;
+    font-size: 0.95rem;
+}
+
+.tab-btn:hover {
+    color: #4f46e5;
+    border-bottom-color: #e5e7eb;
+}
+
+.tab-btn.active {
+    color: #4f46e5;
+    border-bottom-color: #4f46e5;
+}
+
+.tab-content {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Form Elements */
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #1f2937;
+    font-size: 0.95rem;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    font-size: 0.95rem;
+    transition: all 0.3s;
+    background: white;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.form-control:hover {
+    border-color: #9ca3af;
+}
+
+.form-control:disabled {
+    background: #f3f4f6;
+    cursor: not-allowed;
+}
+
+/* Buttons */
+.btn {
+    padding: 0.75rem 1.5rem;
+    border-radius: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    border: none;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    white-space: nowrap;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #4f46e5, #6366f1);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #4338ca, #4f46e5);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(79, 70, 229, 0.3);
+}
+
+.btn-secondary {
+    background: #6b7280;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #4b5563;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(75, 85, 99, 0.3);
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+}
+
+.btn-success:hover {
+    background: linear-gradient(135deg, #059669, #047857);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+}
+
+.btn-warning {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+}
+
+.btn-warning:hover {
+    background: linear-gradient(135deg, #d97706, #b45309);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(245, 158, 11, 0.3);
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: white;
+}
+
+.btn-danger:hover {
+    background: linear-gradient(135deg, #dc2626, #b91c1c);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3);
+}
+
+.btn-sm {
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+}
+
+/* Tables */
+.table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 12px;
+    margin: 1rem 0;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 800px;
+}
+
+th {
+    text-align: left;
+    padding: 1rem;
+    background: #f9fafb;
+    color: #4b5563;
+    font-weight: 600;
+    font-size: 0.85rem;
+    border-bottom: 2px solid #e5e7eb;
+    white-space: nowrap;
+}
+
+td {
+    padding: 1rem;
+    border-bottom: 1px solid #e5e7eb;
+    color: #1f2937;
+    font-size: 0.9rem;
+}
+
+tr:hover {
+    background: #f9fafb;
+}
+
+/* Action Buttons */
+.action-buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* Status Badges */
+.status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    display: inline-block;
+    white-space: nowrap;
+}
+
+.status-success {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.status-warning {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status-danger {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.status-info {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+/* Tables Grid */
+.tables-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.5rem;
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 1rem;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    background: #f9fafb;
+}
+
+.tables-grid label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    border-radius: 6px;
+    transition: background 0.3s;
+    cursor: pointer;
+}
+
+.tables-grid label:hover {
+    background: #f3f4f6;
+}
+
+.tables-grid input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: #4f46e5;
+}
+
+/* Code Block */
+code {
+    display: block;
+    padding: 1rem;
+    background: #f3f4f6;
+    border-radius: 8px;
+    margin: 1rem 0;
+    font-family: monospace;
+    font-size: 0.9rem;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 1024px) {
+    .admin-main {
+        padding: 1.5rem;
+    }
     
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .admin-main {
+        padding: 1rem;
+    }
+    
+    .page-header {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 1.25rem;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+    
+    .stat-card {
+        padding: 1.25rem;
+    }
+    
+    .stat-value {
+        font-size: 1.5rem;
+    }
+    
+    .card {
+        padding: 1.25rem;
+    }
+    
+    .form-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .btn {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .action-buttons {
+        flex-direction: column;
+    }
+    
+    .action-buttons .btn {
+        width: 100%;
+    }
+    
+    .tables-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    }
+    
+    .tabs-scroll {
+        padding-bottom: 0.25rem;
+    }
+    
+    .tab-btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.85rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .admin-main {
+        padding: 0.75rem;
+    }
+    
+    .page-header h1 {
+        font-size: 1.5rem;
+    }
+    
+    .stat-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 1.2rem;
+    }
+    
+    .form-label {
+        font-size: 0.9rem;
+    }
+    
+    .form-control {
+        padding: 0.6rem 0.75rem;
+    }
+    
+    .btn-sm {
+        width: auto;
+    }
+    
+    .tables-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .page-header, .stat-card, .card {
+        background: #1f2937;
+        border-color: #374151;
+    }
+    
+    .stat-value {
+        color: #f3f4f6;
+    }
+    
+    .stat-label {
+        color: #9ca3af;
+    }
+    
+    .form-label {
+        color: #e5e7eb;
+    }
+    
+    .form-control {
+        background: #374151;
+        border-color: #4b5563;
+        color: #f3f4f6;
+    }
+    
+    .form-control:focus {
+        border-color: #818cf8;
+    }
+    
+    table {
+        background: #1f2937;
+    }
+    
+    th {
+        background: #374151;
+        color: #e5e7eb;
+    }
+    
+    td {
+        color: #d1d5db;
+    }
+    
+    tr:hover {
+        background: #374151;
+    }
+    
+    .tables-grid {
+        background: #374151;
+        border-color: #4b5563;
+    }
+    
+    .tables-grid label:hover {
+        background: #4b5563;
+    }
+    
+    code {
+        background: #374151;
+        color: #d1d5db;
+    }
+    
+    .tab-btn {
+        color: #9ca3af;
+    }
+    
+    .tab-btn:hover {
+        color: #818cf8;
+    }
+    
+    .tab-btn.active {
+        color: #818cf8;
+        border-bottom-color: #818cf8;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .btn, .action-buttons {
+        display: none !important;
+    }
+    
+    .card {
+        box-shadow: none;
+        border: 1px solid #000;
+    }
+    
+    table {
+        border-collapse: collapse;
+    }
+    
+    th, td {
+        border: 1px solid #000;
+    }
+}
+</style>
+
+<div class="admin-main">
     <!-- Page Header -->
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <div class="page-header">
         <div>
-            <h1 style="font-size: 2rem; margin-bottom: 0.5rem; color: var(--admin-dark);">
-                <i class="fas fa-database"></i> Backup & Restore
-            </h1>
-            <p style="color: var(--admin-gray);">Create, download, and restore database backups</p>
+            <h1><i class="fas fa-database"></i> Backup & Restore</h1>
+            <p style="color: #6b7280; margin-top: 0.5rem;">Create, download, and restore database backups</p>
         </div>
     </div>
 
     <!-- Messages -->
     <?php if (!empty($success_msg)): ?>
-        <div class="alert alert-success"><?= htmlspecialchars($success_msg) ?></div>
+        <div class="alert alert-success">
+            <i class="fas fa-check-circle"></i>
+            <?= htmlspecialchars($success_msg) ?>
+        </div>
     <?php endif; ?>
     <?php if (!empty($error_msg)): ?>
-        <div class="alert alert-danger"><?= htmlspecialchars($error_msg) ?></div>
+        <div class="alert alert-danger">
+            <i class="fas fa-exclamation-circle"></i>
+            <?= htmlspecialchars($error_msg) ?>
+        </div>
     <?php endif; ?>
 
     <!-- Backup Statistics -->
-    <div class="stats-grid" style="margin-bottom: 2rem;">
+    <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-header">
                 <div>
@@ -582,8 +1214,8 @@ require_once 'header.php';
     </div>
 
     <!-- Tabs -->
-    <div style="border-bottom: 1px solid var(--admin-border); margin-bottom: 2rem;">
-        <div style="display: flex; gap: 1rem;">
+    <div class="tabs-container">
+        <div class="tabs-scroll">
             <button type="button" class="tab-btn active" data-tab="create">Create Backup</button>
             <button type="button" class="tab-btn" data-tab="restore">Restore</button>
             <button type="button" class="tab-btn" data-tab="schedule">Schedule</button>
@@ -602,15 +1234,15 @@ require_once 'header.php';
                 
                 <div class="form-group">
                     <label class="form-label">Tables to Backup</label>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem; max-height: 300px; overflow-y: auto; padding: 1rem; border: 1px solid var(--admin-border); border-radius: 8px;">
+                    <div class="tables-grid">
                         <?php foreach ($tables as $table): ?>
-                            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                            <label>
                                 <input type="checkbox" name="tables[]" value="<?= htmlspecialchars($table) ?>" checked>
                                 <?= htmlspecialchars($table) ?>
                             </label>
                         <?php endforeach; ?>
                     </div>
-                    <div style="margin-top: 0.5rem;">
+                    <div style="margin-top: 0.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
                         <button type="button" class="btn btn-secondary btn-sm" onclick="selectAllTables(true)">Select All</button>
                         <button type="button" class="btn btn-secondary btn-sm" onclick="selectAllTables(false)">Deselect All</button>
                     </div>
@@ -618,19 +1250,19 @@ require_once 'header.php';
 
                 <div class="form-grid">
                     <div class="form-group">
-                        <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem;">
+                        <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                             <input type="checkbox" name="include_uploads" value="1">
                             Include Uploads Folder
                         </label>
-                        <small>This may significantly increase backup size</small>
+                        <small class="form-text">This may significantly increase backup size</small>
                     </div>
 
                     <div class="form-group">
-                        <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem;">
+                        <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                             <input type="checkbox" name="compress" value="1" checked>
                             Compress Backup (ZIP)
                         </label>
-                        <small>Recommended for smaller file size</small>
+                        <small class="form-text">Recommended for smaller file size</small>
                     </div>
                 </div>
 
@@ -649,13 +1281,13 @@ require_once 'header.php';
             <h2 style="margin-bottom: 1.5rem;">Restore from Backup</h2>
             
             <?php if (empty($backup_files)): ?>
-                <div style="text-align: center; padding: 3rem;">
-                    <i class="fas fa-database" style="font-size: 3rem; color: var(--admin-gray); margin-bottom: 1rem; display: block;"></i>
+                <div class="empty-state">
+                    <i class="fas fa-database" style="font-size: 3rem; color: #9ca3af; margin-bottom: 1rem; display: block;"></i>
                     <p>No backup files found</p>
                 </div>
             <?php else: ?>
-                <div style="overflow-x: auto;">
-                    <table style="width: 100%;">
+                <div class="table-responsive">
+                    <table>
                         <thead>
                             <tr>
                                 <th>Backup File</th>
@@ -671,7 +1303,11 @@ require_once 'header.php';
                                     <td><?= htmlspecialchars($backup['name']) ?></td>
                                     <td><?= formatBytes($backup['size']) ?></td>
                                     <td><?= date('M d, Y H:i:s', $backup['modified']) ?></td>
-                                    <td><?= strtoupper($backup['type']) ?></td>
+                                    <td>
+                                        <span class="status-badge status-<?= $backup['type'] === 'zip' ? 'success' : 'info' ?>">
+                                            <?= strtoupper($backup['type']) ?>
+                                        </span>
+                                    </td>
                                     <td>
                                         <div class="action-buttons">
                                             <a href="?action=download&file=<?= urlencode($backup['name']) ?>" 
@@ -705,11 +1341,11 @@ require_once 'header.php';
                 </div>
                 
                 <div style="margin-top: 2rem;">
-                    <p class="alert alert-warning">
+                    <div class="alert alert-warning">
                         <i class="fas fa-exclamation-triangle"></i>
                         <strong>Warning:</strong> Restoring a backup will overwrite your current database. 
                         This action cannot be undone. Make sure you have a recent backup before proceeding.
-                    </p>
+                    </div>
                 </div>
             <?php endif; ?>
         </div>
@@ -748,14 +1384,14 @@ require_once 'header.php';
                     <input type="number" name="retention" 
                            value="<?= htmlspecialchars($schedule['retention'] ?? 7) ?>" 
                            class="form-control" min="1" max="365">
-                    <small>Number of days to keep backups before automatic deletion</small>
+                    <small class="form-text">Number of days to keep backups before automatic deletion</small>
                 </div>
                 
                 <div class="form-group">
                     <label class="form-label">Tables to Backup</label>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem; max-height: 200px; overflow-y: auto; padding: 1rem; border: 1px solid var(--admin-border); border-radius: 8px;">
+                    <div class="tables-grid">
                         <?php foreach ($tables as $table): ?>
-                            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                            <label>
                                 <input type="checkbox" name="scheduled_tables[]" value="<?= htmlspecialchars($table) ?>" 
                                        <?= empty($schedule['tables']) || in_array($table, $schedule['tables']) ? 'checked' : '' ?>>
                                 <?= htmlspecialchars($table) ?>
@@ -765,7 +1401,7 @@ require_once 'header.php';
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem;">
+                    <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                         <input type="checkbox" name="scheduled_include_uploads" value="1" 
                                <?= !empty($schedule['include_uploads']) ? 'checked' : '' ?>>
                         Include Uploads Folder in Scheduled Backups
@@ -773,12 +1409,14 @@ require_once 'header.php';
                 </div>
                 
                 <?php if (!empty($schedule['next_run'])): ?>
-                    <div class="alert alert-info" style="margin-top: 1rem;">
+                    <div class="alert alert-info">
                         <i class="fas fa-clock"></i>
-                        Next scheduled backup: <strong><?= date('M d, Y H:i:s', $schedule['next_run']) ?></strong>
-                        <?php if (!empty($schedule['last_run'])): ?>
-                            <br>Last backup: <?= date('M d, Y H:i:s', $schedule['last_run']) ?>
-                        <?php endif; ?>
+                        <div>
+                            <strong>Next scheduled backup:</strong> <?= date('M d, Y H:i:s', $schedule['next_run']) ?><br>
+                            <?php if (!empty($schedule['last_run'])): ?>
+                                <small>Last backup: <?= date('M d, Y H:i:s', $schedule['last_run']) ?></small>
+                            <?php endif; ?>
+                        </div>
                     </div>
                 <?php endif; ?>
                 
@@ -798,13 +1436,13 @@ require_once 'header.php';
             
             <div class="form-group">
                 <label class="form-label">Backup Directory</label>
-                <div style="display: flex; gap: 0.5rem;">
-                    <input type="text" value="<?= htmlspecialchars($backup_dir) ?>" class="form-control" readonly>
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <input type="text" value="<?= htmlspecialchars($backup_dir) ?>" class="form-control" style="flex: 1;" readonly>
                     <button class="btn btn-secondary" onclick="copyToClipboard('<?= $backup_dir ?>')">
                         <i class="fas fa-copy"></i>
                     </button>
                 </div>
-                <small>Make sure this directory is writable by the web server</small>
+                <small class="form-text">Make sure this directory is writable by the web server</small>
             </div>
             
             <div class="form-group">
@@ -824,23 +1462,23 @@ require_once 'header.php';
             
             <div class="form-group">
                 <label class="form-label">Backup Status</label>
-                <div>
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                     <?php if (is_writable($backup_dir)): ?>
-                        <span class="status-badge status-success">Writable</span>
+                        <span class="status-badge status-success">Writable ✓</span>
                     <?php else: ?>
-                        <span class="status-badge status-danger">Not Writable</span>
+                        <span class="status-badge status-danger">Not Writable ✗</span>
                     <?php endif; ?>
                     
                     <?php if (function_exists('exec')): ?>
-                        <span class="status-badge status-success">Exec Available</span>
+                        <span class="status-badge status-success">Exec Available ✓</span>
                     <?php else: ?>
-                        <span class="status-badge status-warning">Exec Not Available</span>
+                        <span class="status-badge status-warning">Exec Not Available ⚠</span>
                     <?php endif; ?>
                     
                     <?php if (class_exists('ZipArchive')): ?>
-                        <span class="status-badge status-success">ZipArchive Available</span>
+                        <span class="status-badge status-success">ZipArchive Available ✓</span>
                     <?php else: ?>
-                        <span class="status-badge status-danger">ZipArchive Not Available</span>
+                        <span class="status-badge status-danger">ZipArchive Not Available ✗</span>
                     <?php endif; ?>
                 </div>
             </div>
@@ -848,98 +1486,12 @@ require_once 'header.php';
             <div class="alert alert-info">
                 <h4 style="margin-bottom: 0.5rem;">Cron Job Setup</h4>
                 <p>To enable automated backups, add the following line to your crontab:</p>
-                <code style="display: block; padding: 1rem; background: var(--admin-light); border-radius: 4px; margin: 1rem 0;">
-                    * * * * * php <?= realpath(__DIR__ . '/cron/backup.php') ?> >/dev/null 2>&1
-                </code>
-                <p class="small">This will check for scheduled backups every minute.</p>
+                <code>* * * * * php <?= realpath(__DIR__ . '/cron/backup.php') ?> >/dev/null 2>&1</code>
+                <p class="form-text" style="margin-top: 0.5rem;">This will check for scheduled backups every minute.</p>
             </div>
         </div>
     </div>
 </div>
-
-<style>
-.status-badge {
-    padding: 0.25rem 0.75rem;
-    border-radius: 999px;
-    font-size: 0.875rem;
-    font-weight: 600;
-    display: inline-block;
-    margin-right: 0.5rem;
-}
-
-.status-success {
-    background: #d1fae5;
-    color: #065f46;
-}
-
-.status-warning {
-    background: #fef3c7;
-    color: #92400e;
-}
-
-.status-danger {
-    background: #fee2e2;
-    color: #991b1b;
-}
-
-.tab-btn {
-    padding: 0.75rem 1.5rem;
-    background: none;
-    border: none;
-    border-bottom: 3px solid transparent;
-    font-weight: 600;
-    color: var(--admin-gray);
-    cursor: pointer;
-    transition: all 0.3s;
-}
-
-.tab-btn:hover {
-    color: var(--admin-primary);
-    border-bottom-color: var(--admin-border);
-}
-
-.tab-btn.active {
-    color: var(--admin-primary);
-    border-bottom-color: var(--admin-primary);
-}
-
-.tab-content {
-    animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-.btn-sm {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.875rem;
-}
-
-.btn-success {
-    background: linear-gradient(135deg, #10b981, #059669);
-    color: white;
-}
-
-.btn-success:hover {
-    background: linear-gradient(135deg, #059669, #047857);
-}
-
-.btn-warning {
-    background: linear-gradient(135deg, #f59e0b, #d97706);
-    color: white;
-}
-
-.btn-warning:hover {
-    background: linear-gradient(135deg, #d97706, #b45309);
-}
-
-.stat-icon.info {
-    background: linear-gradient(135deg, #3b82f6, #2563eb);
-    color: white;
-}
-</style>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -947,25 +1499,38 @@ document.addEventListener('DOMContentLoaded', function() {
     const tabBtns = document.querySelectorAll('.tab-btn');
     const tabContents = document.querySelectorAll('.tab-content');
     
+    function showTab(tabId) {
+        tabBtns.forEach(b => b.classList.remove('active'));
+        tabContents.forEach(c => c.style.display = 'none');
+        
+        const activeBtn = document.querySelector(`[data-tab="${tabId}"]`);
+        if (activeBtn) {
+            activeBtn.classList.add('active');
+        }
+        
+        const activeTab = document.getElementById(tabId + 'Tab');
+        if (activeTab) {
+            activeTab.style.display = 'block';
+        }
+    }
+    
     tabBtns.forEach(btn => {
         btn.addEventListener('click', function() {
-            const tabId = this.getAttribute('data-tab') + 'Tab';
-            
-            tabBtns.forEach(b => b.classList.remove('active'));
-            tabContents.forEach(c => c.style.display = 'none');
-            
-            this.classList.add('active');
-            document.getElementById(tabId).style.display = 'block';
+            const tabId = this.getAttribute('data-tab');
+            showTab(tabId);
+            history.pushState(null, null, '#' + tabId);
         });
     });
     
     // Check URL hash for tab
     const hash = window.location.hash.substring(1);
-    if (hash) {
-        const tab = document.querySelector(`[data-tab="${hash}"]`);
-        if (tab) {
-            tab.click();
-        }
+    if (hash && ['create', 'restore', 'schedule', 'settings'].includes(hash)) {
+        showTab(hash);
+    }
+    
+    // Prevent form resubmission on refresh
+    if (window.history.replaceState) {
+        window.history.replaceState(null, null, window.location.href);
     }
 });
 
@@ -981,6 +1546,15 @@ function confirmRestore() {
 function copyToClipboard(text) {
     navigator.clipboard.writeText(text).then(() => {
         alert('Copied to clipboard!');
+    }).catch(() => {
+        // Fallback
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        alert('Copied to clipboard!');
     });
 }
 
@@ -995,5 +1569,16 @@ document.getElementById('backupFrequency')?.addEventListener('change', function(
         timeInput.disabled = false;
     }
 });
-</script>
 
+// Add keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    // Ctrl/Cmd + B to create backup
+    if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+        e.preventDefault();
+        const createBtn = document.querySelector('button[type="submit"]');
+        if (createBtn) {
+            createBtn.click();
+        }
+    }
+});
+</script>

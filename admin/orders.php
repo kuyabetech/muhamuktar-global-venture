@@ -136,7 +136,41 @@ $statuses = ['pending','paid','processing','shipped','delivered','completed','ca
 ?>
 
 <style>
-/* Orders Page Custom Styles */
+/* Base Admin Styles */
+.admin-main {
+    padding: 2rem;
+    max-width: 1600px;
+    margin: 0 auto;
+}
+
+/* Breadcrumb */
+.breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+    color: #6b7280;
+    flex-wrap: wrap;
+}
+
+.breadcrumb a {
+    color: #4f46e5;
+    text-decoration: none;
+    transition: color 0.3s;
+}
+
+.breadcrumb a:hover {
+    color: #4338ca;
+    text-decoration: underline;
+}
+
+/* Responsive Typography */
+h1 { font-size: clamp(1.8rem, 4vw, 2rem); }
+h2 { font-size: clamp(1.3rem, 3vw, 1.5rem); }
+h3 { font-size: clamp(1.1rem, 2.5vw, 1.25rem); }
+
+/* Header Section */
 .orders-header {
     display: flex;
     justify-content: space-between;
@@ -144,18 +178,28 @@ $statuses = ['pending','paid','processing','shipped','delivered','completed','ca
     margin-bottom: 2rem;
     flex-wrap: wrap;
     gap: 1rem;
+    background: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    border: 1px solid #e5e7eb;
 }
 
 .orders-header h1 {
     font-size: 1.8rem;
     font-weight: 700;
-    color: var(--admin-dark);
+    color: #1f2937;
     margin: 0;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 
 .header-actions {
     display: flex;
-    gap: 1rem;
+    gap: 0.75rem;
+    flex-wrap: wrap;
 }
 
 .filter-btn, .export-btn {
@@ -163,89 +207,112 @@ $statuses = ['pending','paid','processing','shipped','delivered','completed','ca
     align-items: center;
     gap: 0.5rem;
     padding: 0.75rem 1.25rem;
-    border-radius: 0.5rem;
-    font-weight: 500;
+    border-radius: 10px;
+    font-weight: 600;
     cursor: pointer;
-    transition: var(--transition);
+    transition: all 0.3s;
     text-decoration: none;
-    border: 1px solid transparent;
+    border: none;
+    font-size: 0.9rem;
 }
 
 .filter-btn {
     background: white;
-    color: var(--admin-dark);
-    border-color: var(--admin-border);
+    color: #1f2937;
+    border: 2px solid #e5e7eb;
 }
 
 .filter-btn:hover {
-    background: var(--admin-light);
+    background: #f9fafb;
+    border-color: #4f46e5;
     transform: translateY(-2px);
-    box-shadow: var(--admin-shadow);
+    box-shadow: 0 8px 20px rgba(79, 70, 229, 0.15);
 }
 
 .export-btn {
-    background: linear-gradient(135deg, var(--admin-secondary), #34d399);
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
     color: white;
-    border: none;
 }
 
 .export-btn:hover {
     transform: translateY(-2px);
-    box-shadow: var(--admin-shadow);
+    box-shadow: 0 8px 20px rgba(79, 70, 229, 0.3);
 }
 
 /* Success Message */
 .success-message {
     background: linear-gradient(90deg, #d1fae5, #ecfdf5);
-    border-left: 4px solid var(--admin-secondary);
+    border-left: 4px solid #10b981;
     color: #065f46;
     padding: 1rem 1.25rem;
-    border-radius: 0.5rem;
+    border-radius: 10px;
     margin-bottom: 1.5rem;
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(-100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
 }
 
 /* Filters Panel */
 .filters-panel {
     background: white;
     padding: 1.5rem;
-    border-radius: 0.75rem;
-    box-shadow: var(--admin-shadow);
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
     margin-bottom: 1.5rem;
-    border: 1px solid var(--admin-border);
+    border: 1px solid #e5e7eb;
     display: none;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .filters-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 1.5rem;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
 }
 
 .filter-group label {
     display: block;
     margin-bottom: 0.5rem;
     font-weight: 600;
-    color: var(--admin-dark);
+    color: #1f2937;
     font-size: 0.9rem;
 }
 
 .filter-input, .filter-select {
     width: 100%;
-    padding: 0.75rem;
-    border: 1px solid var(--admin-border);
-    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
     background: white;
-    color: var(--admin-dark);
-    transition: var(--transition);
+    color: #1f2937;
+    transition: all 0.3s;
+    font-size: 0.95rem;
 }
 
 .filter-input:focus, .filter-select:focus {
     outline: none;
-    border-color: var(--admin-primary);
+    border-color: #4f46e5;
     box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.filter-input:hover, .filter-select:hover {
+    border-color: #9ca3af;
 }
 
 .filter-buttons {
@@ -256,109 +323,129 @@ $statuses = ['pending','paid','processing','shipped','delivered','completed','ca
 
 .filter-submit {
     padding: 0.75rem 1.5rem;
-    background: linear-gradient(135deg, var(--admin-primary), var(--admin-primary-dark));
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
     color: white;
     border: none;
-    border-radius: 0.5rem;
-    font-weight: 500;
+    border-radius: 10px;
+    font-weight: 600;
     cursor: pointer;
-    transition: var(--transition);
+    transition: all 0.3s;
     flex: 1;
 }
 
 .filter-submit:hover {
     transform: translateY(-2px);
-    box-shadow: var(--admin-shadow);
+    box-shadow: 0 8px 20px rgba(79, 70, 229, 0.3);
 }
 
 .filter-clear {
     padding: 0.75rem 1.5rem;
-    background: var(--admin-gray);
+    background: #ef4444;
     color: white;
     border: none;
-    border-radius: 0.5rem;
-    font-weight: 500;
+    border-radius: 10px;
+    font-weight: 600;
     cursor: pointer;
-    transition: var(--transition);
+    transition: all 0.3s;
 }
 
 .filter-clear:hover {
-    background: #6b7280;
+    background: #dc2626;
     transform: translateY(-2px);
-    box-shadow: var(--admin-shadow);
+    box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3);
 }
 
 /* Bulk Actions */
 .bulk-actions {
     background: white;
-    padding: 1rem;
-    border-radius: 0.75rem;
-    box-shadow: var(--admin-shadow);
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
     margin-bottom: 1.5rem;
     display: flex;
     gap: 1rem;
     align-items: center;
+    flex-wrap: wrap;
+    border: 1px solid #e5e7eb;
 }
 
 .bulk-select {
-    padding: 0.75rem;
-    border: 1px solid var(--admin-border);
-    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
     background: white;
-    color: var(--admin-dark);
+    color: #1f2937;
     min-width: 200px;
+    font-size: 0.95rem;
+    transition: all 0.3s;
+}
+
+.bulk-select:focus {
+    outline: none;
+    border-color: #4f46e5;
 }
 
 .bulk-apply {
     padding: 0.75rem 1.5rem;
-    background: linear-gradient(135deg, var(--admin-primary), var(--admin-primary-dark));
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
     color: white;
     border: none;
-    border-radius: 0.5rem;
-    font-weight: 500;
+    border-radius: 10px;
+    font-weight: 600;
     cursor: pointer;
-    transition: var(--transition);
+    transition: all 0.3s;
 }
 
 .bulk-apply:hover {
     transform: translateY(-2px);
-    box-shadow: var(--admin-shadow);
+    box-shadow: 0 8px 20px rgba(79, 70, 229, 0.3);
 }
 
 .total-count {
     margin-left: auto;
-    color: var(--admin-gray);
-    font-size: 0.875rem;
+    color: #6b7280;
+    font-size: 0.95rem;
+    background: #f3f4f6;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-weight: 600;
 }
 
 /* Orders Table */
 .orders-table-container {
     background: white;
-    border-radius: 0.75rem;
-    box-shadow: var(--admin-shadow);
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
     overflow: hidden;
     margin-bottom: 2rem;
+    border: 1px solid #e5e7eb;
+}
+
+.orders-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .orders-table {
     width: 100%;
     border-collapse: collapse;
-    min-width: 1000px;
+    min-width: 1200px;
 }
 
 .orders-table thead {
-    background: var(--admin-light);
+    background: linear-gradient(90deg, #f9fafb, #f3f4f6);
 }
 
 .orders-table th {
-    padding: 1rem;
+    padding: 1.2rem 1rem;
     text-align: left;
-    font-weight: 600;
-    color: var(--admin-dark);
-    border-bottom: 2px solid var(--admin-border);
-    font-size: 0.875rem;
+    font-weight: 700;
+    color: #1f2937;
+    border-bottom: 2px solid #e5e7eb;
+    font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    white-space: nowrap;
 }
 
 .orders-table th.text-right {
@@ -370,72 +457,87 @@ $statuses = ['pending','paid','processing','shipped','delivered','completed','ca
 }
 
 .orders-table td {
-    padding: 1rem;
-    border-bottom: 1px solid var(--admin-border);
-    vertical-align: top;
+    padding: 1.2rem 1rem;
+    border-bottom: 1px solid #e5e7eb;
+    vertical-align: middle;
+    font-size: 0.95rem;
 }
 
 .orders-table tr:last-child td {
     border-bottom: none;
 }
 
-.orders-table tr:hover {
-    background: var(--admin-light);
+.orders-table tbody tr {
+    transition: background 0.3s;
+}
+
+.orders-table tbody tr:hover {
+    background: #f9fafb;
 }
 
 /* Checkbox Column */
 .checkbox-cell {
-    width: 40px;
+    width: 50px;
+    text-align: center;
 }
 
 .table-checkbox {
     width: 18px;
     height: 18px;
     cursor: pointer;
-    accent-color: var(--admin-primary);
+    accent-color: #4f46e5;
+    transition: all 0.2s;
+}
+
+.table-checkbox:hover {
+    transform: scale(1.1);
 }
 
 /* Order Number Cell */
 .order-number {
-    font-weight: 600;
-    color: var(--admin-dark);
+    font-weight: 700;
+    color: #4f46e5;
     margin-bottom: 0.25rem;
-    display: block;
+    display: inline-block;
     text-decoration: none;
-    transition: var(--transition);
+    transition: all 0.3s;
+    font-size: 0.95rem;
 }
 
 .order-number:hover {
-    color: var(--admin-primary);
+    color: #4338ca;
+    transform: translateX(2px);
 }
 
 .item-count {
     font-size: 0.75rem;
-    color: var(--admin-gray);
-    background: var(--admin-light);
+    color: #6b7280;
+    background: #f3f4f6;
     padding: 0.25rem 0.5rem;
-    border-radius: 0.25rem;
+    border-radius: 999px;
     display: inline-block;
+    margin-left: 0.5rem;
 }
 
 /* Customer Cell */
 .customer-name {
-    font-weight: 500;
-    color: var(--admin-dark);
+    font-weight: 600;
+    color: #1f2937;
     margin-bottom: 0.25rem;
 }
 
 .customer-details {
-    font-size: 0.75rem;
-    color: var(--admin-gray);
-    line-height: 1.4;
+    font-size: 0.8rem;
+    color: #6b7280;
+    line-height: 1.5;
 }
 
 /* Amount Cell */
 .order-amount {
-    font-weight: 600;
-    color: var(--admin-dark);
+    font-weight: 700;
+    color: #1f2937;
     text-align: right;
+    font-size: 1rem;
 }
 
 /* Status Cell */
@@ -452,53 +554,59 @@ $statuses = ['pending','paid','processing','shipped','delivered','completed','ca
     font-size: 0.75rem;
     font-weight: 600;
     color: white;
-    min-width: 80px;
+    min-width: 90px;
     text-align: center;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.25rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .payment-status-badge {
-    padding: 0.25rem 0.5rem;
+    padding: 0.3rem 0.6rem;
     border-radius: 999px;
     font-size: 0.7rem;
-    font-weight: 500;
+    font-weight: 600;
     color: white;
-    min-width: 60px;
+    min-width: 70px;
     text-align: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 /* Location Cell */
 .location-info {
-    color: var(--admin-gray);
-    font-size: 0.875rem;
+    color: #1f2937;
+    font-size: 0.9rem;
+    font-weight: 500;
 }
 
 .location-empty {
     color: #9ca3af;
     font-style: italic;
-    font-size: 0.875rem;
+    font-size: 0.85rem;
 }
 
 /* Date Cell */
 .order-date {
-    color: var(--admin-gray);
-    font-size: 0.875rem;
-    line-height: 1.4;
+    color: #1f2937;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    font-weight: 500;
 }
 
 .order-time {
-    color: #9ca3af;
-    font-size: 0.75rem;
+    color: #6b7280;
+    font-size: 0.8rem;
+    font-weight: normal;
 }
 
 /* Actions Cell */
 .actions-container {
     display: flex;
-    gap: 0.5rem;
+    gap: 0.75rem;
     justify-content: flex-end;
+    align-items: center;
 }
 
 .quick-status-form {
@@ -506,63 +614,77 @@ $statuses = ['pending','paid','processing','shipped','delivered','completed','ca
 }
 
 .quick-status-select {
-    padding: 0.5rem;
-    border: 1px solid var(--admin-border);
-    border-radius: 0.5rem;
+    padding: 0.6rem 0.8rem;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
     background: white;
-    color: var(--admin-dark);
-    font-size: 0.75rem;
+    color: #1f2937;
+    font-size: 0.8rem;
     cursor: pointer;
-    transition: var(--transition);
+    transition: all 0.3s;
+    min-width: 120px;
 }
 
 .quick-status-select:focus {
     outline: none;
-    border-color: var(--admin-primary);
+    border-color: #4f46e5;
+}
+
+.quick-status-select:hover {
+    border-color: #9ca3af;
 }
 
 .view-btn {
     display: inline-flex;
     align-items: center;
-    gap: 0.25rem;
-    padding: 0.5rem 1rem;
-    background: var(--admin-light);
-    color: var(--admin-dark);
-    border-radius: 0.5rem;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    color: white;
+    border-radius: 8px;
     text-decoration: none;
-    font-weight: 500;
-    font-size: 0.75rem;
-    transition: var(--transition);
+    font-weight: 600;
+    font-size: 0.8rem;
+    transition: all 0.3s;
+    border: none;
 }
 
 .view-btn:hover {
-    background: var(--admin-primary);
-    color: white;
     transform: translateY(-2px);
-    box-shadow: var(--admin-shadow);
+    box-shadow: 0 8px 20px rgba(79, 70, 229, 0.3);
 }
 
 /* Empty State */
 .empty-state {
-    padding: 4rem 1.5rem;
+    padding: 5rem 1.5rem;
     text-align: center;
-    color: var(--admin-gray);
+    color: #6b7280;
 }
 
 .empty-icon {
-    font-size: 3rem;
-    color: var(--admin-border);
-    margin-bottom: 1rem;
+    font-size: 4rem;
+    color: #e5e7eb;
+    margin-bottom: 1.5rem;
+    animation: bounce 2s infinite;
+}
+
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
 }
 
 .empty-title {
-    font-size: 1.125rem;
-    margin-bottom: 0.5rem;
-    color: var(--admin-dark);
+    font-size: 1.3rem;
+    margin-bottom: 0.75rem;
+    color: #1f2937;
+    font-weight: 700;
 }
 
 .empty-description {
-    color: var(--admin-gray);
+    color: #6b7280;
+    font-size: 1rem;
+    max-width: 400px;
+    margin: 0 auto;
 }
 
 /* Pagination */
@@ -575,31 +697,36 @@ $statuses = ['pending','paid','processing','shipped','delivered','completed','ca
 .pagination-links {
     display: flex;
     gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
 }
 
 .pagination-link {
     padding: 0.75rem 1rem;
-    background: var(--admin-light);
-    color: var(--admin-dark);
-    border-radius: 0.5rem;
+    background: white;
+    color: #1f2937;
+    border-radius: 10px;
     text-decoration: none;
-    transition: var(--transition);
-    font-size: 0.875rem;
-    font-weight: 500;
-    min-width: 40px;
+    transition: all 0.3s;
+    font-size: 0.9rem;
+    font-weight: 600;
+    min-width: 45px;
     text-align: center;
+    border: 2px solid #e5e7eb;
 }
 
 .pagination-link:hover {
-    background: var(--admin-primary);
+    background: #4f46e5;
     color: white;
+    border-color: #4f46e5;
     transform: translateY(-2px);
-    box-shadow: var(--admin-shadow);
+    box-shadow: 0 8px 20px rgba(79, 70, 229, 0.3);
 }
 
 .pagination-link.active {
-    background: linear-gradient(135deg, var(--admin-primary), var(--admin-primary-dark));
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
     color: white;
+    border-color: #4f46e5;
 }
 
 .pagination-link.disabled {
@@ -608,28 +735,52 @@ $statuses = ['pending','paid','processing','shipped','delivered','completed','ca
     pointer-events: none;
 }
 
-.pagination-link.disabled:hover {
-    background: var(--admin-light);
-    color: var(--admin-dark);
-    transform: none;
-    box-shadow: none;
+/* Responsive Breakpoints */
+@media (max-width: 1200px) {
+    .orders-table {
+        min-width: 1000px;
+    }
+    
+    .filters-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
 
-/* Responsive */
+@media (max-width: 992px) {
+    .admin-main {
+        padding: 1.5rem;
+    }
+    
+    .orders-header {
+        padding: 1.25rem;
+    }
+    
+    .filters-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+}
+
 @media (max-width: 768px) {
+    .admin-main {
+        padding: 1rem;
+    }
+    
     .orders-header {
         flex-direction: column;
-        align-items: flex-start;
+        align-items: stretch;
+        padding: 1rem;
     }
     
     .header-actions {
         width: 100%;
-        justify-content: space-between;
+        justify-content: stretch;
     }
     
     .filter-btn, .export-btn {
         flex: 1;
         justify-content: center;
+        padding: 0.75rem;
     }
     
     .filters-grid {
@@ -643,6 +794,7 @@ $statuses = ['pending','paid','processing','shipped','delivered','completed','ca
     .bulk-actions {
         flex-direction: column;
         align-items: stretch;
+        padding: 1rem;
     }
     
     .bulk-select, .bulk-apply {
@@ -655,19 +807,161 @@ $statuses = ['pending','paid','processing','shipped','delivered','completed','ca
     }
     
     .orders-table-container {
-        border-radius: 0;
-        margin: 0 -1rem;
-        width: calc(100% + 2rem);
+        border-radius: 10px;
+        margin: 0;
     }
     
     .pagination-links {
-        flex-wrap: wrap;
-        justify-content: center;
+        gap: 0.35rem;
+    }
+    
+    .pagination-link {
+        padding: 0.6rem 0.8rem;
+        min-width: 38px;
+        font-size: 0.85rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .admin-main {
+        padding: 0.75rem;
+    }
+    
+    .orders-header h1 {
+        font-size: 1.5rem;
+    }
+    
+    .header-actions {
+        flex-direction: column;
+    }
+    
+    .filter-btn, .export-btn {
+        width: 100%;
+    }
+    
+    .orders-table {
+        min-width: 800px;
+    }
+    
+    .empty-icon {
+        font-size: 3rem;
+    }
+    
+    .empty-title {
+        font-size: 1.1rem;
+    }
+    
+    .empty-description {
+        font-size: 0.9rem;
+    }
+    
+    .pagination-links {
+        gap: 0.25rem;
+    }
+    
+    .pagination-link {
+        padding: 0.5rem 0.7rem;
+        min-width: 35px;
+        font-size: 0.8rem;
+    }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .orders-header, .filters-panel, .bulk-actions, .orders-table-container {
+        background: #1f2937;
+        border-color: #374151;
+    }
+    
+    .orders-header h1 {
+        color: #f3f4f6;
+    }
+    
+    .filter-btn {
+        background: #374151;
+        color: #f3f4f6;
+        border-color: #4b5563;
+    }
+    
+    .filter-btn:hover {
+        background: #4b5563;
+    }
+    
+    .total-count {
+        background: #374151;
+        color: #d1d5db;
+    }
+    
+    .orders-table thead {
+        background: #374151;
+    }
+    
+    .orders-table th {
+        color: #e5e7eb;
+        border-bottom-color: #4b5563;
+    }
+    
+    .orders-table td {
+        border-bottom-color: #4b5563;
+        color: #d1d5db;
+    }
+    
+    .orders-table tbody tr:hover {
+        background: #374151;
+    }
+    
+    .customer-name, .order-amount, .order-number, .location-info, .order-date {
+        color: #f3f4f6;
+    }
+    
+    .customer-details, .order-time, .location-empty {
+        color: #9ca3af;
+    }
+    
+    .filter-input, .filter-select, .bulk-select, .quick-status-select {
+        background: #374151;
+        border-color: #4b5563;
+        color: #f3f4f6;
+    }
+    
+    .filter-input:hover, .filter-select:hover, .bulk-select:hover, .quick-status-select:hover {
+        border-color: #6b7280;
+    }
+    
+    .filter-input:focus, .filter-select:focus, .bulk-select:focus, .quick-status-select:focus {
+        border-color: #818cf8;
+    }
+    
+    .pagination-link {
+        background: #374151;
+        border-color: #4b5563;
+        color: #d1d5db;
+    }
+    
+    .pagination-link:hover {
+        background: #4f46e5;
+        color: white;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .filter-btn, .export-btn, .bulk-actions, .actions-container, .pagination {
+        display: none !important;
+    }
+    
+    .orders-table-container {
+        box-shadow: none;
+        border: 1px solid #000;
+    }
+    
+    .orders-table th {
+        background: #f3f4f6;
     }
 }
 </style>
 
-<main class="admin-main" style="margin:10px;">
+<main class="admin-main">
     <!-- Breadcrumb -->
     <div class="breadcrumb">
         <a href="<?= BASE_URL ?>admin/dashboard.php"><i class="fas fa-home"></i> Dashboard</a>
@@ -681,11 +975,11 @@ $statuses = ['pending','paid','processing','shipped','delivered','completed','ca
         <div class="header-actions">
             <button class="filter-btn" onclick="toggleFilters()">
                 <i class="fas fa-filter"></i>
-                Filters
+                <span class="btn-text">Filters</span>
             </button>
             <a href="?export=csv" class="export-btn">
                 <i class="fas fa-download"></i>
-                Export CSV
+                <span class="btn-text">Export CSV</span>
             </a>
         </div>
     </div>
@@ -698,7 +992,7 @@ $statuses = ['pending','paid','processing','shipped','delivered','completed','ca
     <?php endif; ?>
 
     <!-- Filters Panel -->
-    <div id="filtersPanel" class="filters-panel">
+    <div id="filtersPanel" class="filters-panel" <?= ($status_filter || $search || $date_from || $date_to) ? 'style="display:block;"' : '' ?>>
         <form method="GET" class="filters-grid">
             <!-- Search -->
             <div class="filter-group">
@@ -706,7 +1000,7 @@ $statuses = ['pending','paid','processing','shipped','delivered','completed','ca
                 <input type="text" 
                        name="search" 
                        value="<?= htmlspecialchars($search) ?>" 
-                       placeholder="Order number, customer name, email, phone..."
+                       placeholder="Order number, customer..."
                        class="filter-input">
             </div>
             
@@ -725,7 +1019,7 @@ $statuses = ['pending','paid','processing','shipped','delivered','completed','ca
             
             <!-- Date Range -->
             <div class="filter-group">
-                <label>Date From</label>
+                <label>From Date</label>
                 <input type="date" 
                        name="date_from" 
                        value="<?= htmlspecialchars($date_from) ?>" 
@@ -733,7 +1027,7 @@ $statuses = ['pending','paid','processing','shipped','delivered','completed','ca
             </div>
             
             <div class="filter-group">
-                <label>Date To</label>
+                <label>To Date</label>
                 <input type="date" 
                        name="date_to" 
                        value="<?= htmlspecialchars($date_to) ?>" 
@@ -745,7 +1039,7 @@ $statuses = ['pending','paid','processing','shipped','delivered','completed','ca
                 <button type="submit" class="filter-submit">
                     Apply Filters
                 </button>
-                <button type="button" onclick="window.location='?'" class="filter-clear">
+                <button type="button" onclick="window.location='?page=<?= $page ?>'" class="filter-clear">
                     Clear Filters
                 </button>
             </div>
@@ -897,7 +1191,7 @@ $statuses = ['pending','paid','processing','shipped','delivered','completed','ca
                                         <!-- View Button -->
                                         <a href="order-detail.php?id=<?= $order['id'] ?>" class="view-btn">
                                             <i class="fas fa-eye"></i>
-                                            View
+                                            <span class="btn-text">View</span>
                                         </a>
                                     </div>
                                 </td>
@@ -916,7 +1210,7 @@ $statuses = ['pending','paid','processing','shipped','delivered','completed','ca
                 <?php if ($page > 1): ?>
                     <a href="?page=<?= $page-1 ?>&status=<?= urlencode($status_filter) ?>&search=<?= urlencode($search) ?>&date_from=<?= urlencode($date_from) ?>&date_to=<?= urlencode($date_to) ?>" 
                        class="pagination-link">
-                        ← Previous
+                        <i class="fas fa-chevron-left"></i>
                     </a>
                 <?php endif; ?>
                 
@@ -934,7 +1228,7 @@ $statuses = ['pending','paid','processing','shipped','delivered','completed','ca
                 <?php if ($page < $total_pages): ?>
                     <a href="?page=<?= $page+1 ?>&status=<?= urlencode($status_filter) ?>&search=<?= urlencode($search) ?>&date_from=<?= urlencode($date_from) ?>&date_to=<?= urlencode($date_to) ?>" 
                        class="pagination-link">
-                        Next →
+                        <i class="fas fa-chevron-right"></i>
                     </a>
                 <?php endif; ?>
             </div>
@@ -945,7 +1239,12 @@ $statuses = ['pending','paid','processing','shipped','delivered','completed','ca
 <script>
 function toggleFilters() {
     const panel = document.getElementById('filtersPanel');
-    panel.style.display = panel.style.display === 'none' || panel.style.display === '' ? 'block' : 'none';
+    if (panel.style.display === 'none' || panel.style.display === '') {
+        panel.style.display = 'block';
+        panel.style.animation = 'fadeIn 0.3s ease';
+    } else {
+        panel.style.display = 'none';
+    }
 }
 
 function toggleSelectAll() {
@@ -975,11 +1274,6 @@ function confirmBulkAction() {
     return confirm(`Are you sure you want to update ${selected.length} order(s) to "${action}"?`);
 }
 
-// Show filters panel if filters are active
-<?php if ($status_filter || $search || $date_from || $date_to): ?>
-document.getElementById('filtersPanel').style.display = 'block';
-<?php endif; ?>
-
 // Add keyboard shortcuts
 document.addEventListener('keydown', function(e) {
     // Ctrl/Cmd + F to toggle filters
@@ -987,11 +1281,13 @@ document.addEventListener('keydown', function(e) {
         e.preventDefault();
         toggleFilters();
         const searchInput = document.querySelector('input[name="search"]');
-        if (searchInput) searchInput.focus();
+        if (searchInput) {
+            setTimeout(() => searchInput.focus(), 100);
+        }
     }
     
     // Ctrl/Cmd + A to select all
-    if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'a' && !e.target.matches('input, textarea')) {
         e.preventDefault();
         const selectAll = document.getElementById('selectAll');
         if (selectAll) {
@@ -1014,9 +1310,53 @@ document.addEventListener('DOMContentLoaded', function() {
             const checkbox = row.querySelector('.order-checkbox');
             if (checkbox) {
                 checkbox.checked = !checkbox.checked;
+                
+                // Highlight row when selected
+                if (checkbox.checked) {
+                    row.style.background = 'rgba(79, 70, 229, 0.1)';
+                } else {
+                    row.style.background = '';
+                }
             }
         });
+        
+        // Check if checkbox is already checked
+        const checkbox = row.querySelector('.order-checkbox');
+        if (checkbox && checkbox.checked) {
+            row.style.background = 'rgba(79, 70, 229, 0.1)';
+        }
     });
+    
+    // Handle select all with highlighting
+    const selectAll = document.getElementById('selectAll');
+    if (selectAll) {
+        selectAll.addEventListener('change', function() {
+            const isChecked = this.checked;
+            rows.forEach(row => {
+                const checkbox = row.querySelector('.order-checkbox');
+                if (checkbox) {
+                    checkbox.checked = isChecked;
+                    if (isChecked) {
+                        row.style.background = 'rgba(79, 70, 229, 0.1)';
+                    } else {
+                        row.style.background = '';
+                    }
+                }
+            });
+        });
+    }
 });
-</script>
 
+// Handle responsive button text
+function handleResponsiveText() {
+    const btnTexts = document.querySelectorAll('.btn-text');
+    if (window.innerWidth <= 480) {
+        btnTexts.forEach(el => el.style.display = 'none');
+    } else {
+        btnTexts.forEach(el => el.style.display = '');
+    }
+}
+
+window.addEventListener('load', handleResponsiveText);
+window.addEventListener('resize', handleResponsiveText);
+</script>

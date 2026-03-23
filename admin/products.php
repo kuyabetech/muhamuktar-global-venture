@@ -1,12 +1,11 @@
 <?php
-// admin/products.php - Manage Products
+// admin/products.php - Complete Product Management with Import Feature
 
 $page_title = "Manage Products";
 require_once '../includes/config.php';
 require_once '../includes/db.php';
 require_once '../includes/functions.php';
 require_once '../includes/auth.php';
-
 
 // Admin only
 require_admin();
@@ -38,6 +37,41 @@ $total_products = 0;
 $total_pages = 0;
 $low_stock = 0;
 
+// Initialize import variables
+$import_log = [];
+$import_stats = ['total' => 0, 'success' => 0, 'failed' => 0, 'skipped' => 0];
+$import_errors = [];
+
+// Helper function for creating slugs
+if (!function_exists('createSlug')) {
+    function createSlug($text) {
+        // Replace non letter or digits with -
+        $text = preg_replace('~[^\pL\d]+~u', '-', $text);
+        // Transliterate
+        $text = iconv('utf-8', 'us-ascii//TRANSLIT', $text);
+        // Remove unwanted characters
+        $text = preg_replace('~[^-\w]+~', '', $text);
+        // Trim
+        $text = trim($text, '-');
+        // Remove duplicate -
+        $text = preg_replace('~-+~', '-', $text);
+        // Lowercase
+        $text = strtolower($text);
+        
+        if (empty($text)) {
+            return 'product-' . uniqid();
+        }
+        
+        return $text;
+    }
+}
+
+// Create upload directory for imports
+$import_dir = '../uploads/imports/';
+if (!is_dir($import_dir)) {
+    mkdir($import_dir, 0755, true);
+}
+
 // Check and create necessary tables
 function createProductsTable() {
     global $pdo;
@@ -63,7 +97,7 @@ function createProductsTable() {
                 short_description TEXT NULL,
                 status ENUM('draft','active','inactive') DEFAULT 'draft',
                 featured TINYINT(1) DEFAULT 0,
-                is_virtual TINYINT(1) DEFAULT 0,  -- Changed virtual to is_virtual
+                is_virtual TINYINT(1) DEFAULT 0,
                 downloadable TINYINT(1) DEFAULT 0,
                 taxable TINYINT(1) DEFAULT 1,
                 meta_title VARCHAR(255) NULL,
@@ -155,7 +189,261 @@ try {
     $categories = [];
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// Handle CSV Import
+if (isset($_POST['import_products']) && isset($_FILES['import_file'])) {
+    $file = $_FILES['import_file'];
+    $file_ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    
+    // Validate file type
+    $allowed_extensions = ['csv', 'txt', 'xls', 'xlsx'];
+    if (!in_array($file_ext, $allowed_extensions)) {
+        $import_errors[] = "Invalid file type. Please upload CSV or Excel file.";
+    } elseif ($file['error'] !== UPLOAD_ERR_OK) {
+        $import_errors[] = "File upload failed. Error code: " . $file['error'];
+    } else {
+        // Process CSV file
+        if (($handle = fopen($file['tmp_name'], 'r')) !== FALSE) {
+            // Get headers
+            $headers = fgetcsv($handle);
+            
+            // Validate required columns
+            $required_columns = ['name', 'price'];
+            $missing_columns = array_diff($required_columns, array_map('strtolower', $headers));
+            
+            if (!empty($missing_columns)) {
+                $import_errors[] = "Missing required columns: " . implode(', ', $missing_columns);
+            } else {
+                $row_number = 1;
+                $pdo->beginTransaction();
+                
+                try {
+                    while (($data = fgetcsv($handle)) !== FALSE) {
+                        $row_number++;
+                        $import_stats['total']++;
+                        
+                        // Combine headers with data
+                        $row_data = array_combine($headers, $data);
+                        
+                        // Skip empty rows
+                        if (empty(array_filter($row_data))) {
+                            $import_stats['skipped']++;
+                            continue;
+                        }
+                        
+                        // Validate required fields
+                        $errors = [];
+                        if (empty(trim($row_data['name'] ?? ''))) {
+                            $errors[] = "Product name is required";
+                        }
+                        if (!is_numeric($row_data['price'] ?? '') || (float)$row_data['price'] <= 0) {
+                            $errors[] = "Valid price is required";
+                        }
+                        
+                        if (empty($errors)) {
+                            try {
+                                // Prepare product data
+                                $name = trim($row_data['name']);
+                                $slug = createSlug($name);
+                                
+                                // Check if product already exists (by SKU or name)
+                                $check_sql = "SELECT id FROM products WHERE ";
+                                $check_params = [];
+                                
+                                if (!empty($row_data['sku'])) {
+                                    $check_sql .= "sku = ?";
+                                    $check_params[] = trim($row_data['sku']);
+                                } else {
+                                    $check_sql .= "name = ?";
+                                    $check_params[] = $name;
+                                }
+                                
+                                $check_stmt = $pdo->prepare($check_sql);
+                                $check_stmt->execute($check_params);
+                                $existing = $check_stmt->fetch();
+                                
+                                if ($existing && empty($row_data['force_update'])) {
+                                    $import_stats['skipped']++;
+                                    $import_log[] = "Row $row_number: Product already exists - " . $name;
+                                    continue;
+                                }
+                                
+                                // Handle category
+                                $category_id = null;
+                                if (!empty($row_data['category'])) {
+                                    $category_name = trim($row_data['category']);
+                                    $cat_stmt = $pdo->prepare("SELECT id FROM categories WHERE name = ? OR slug = ?");
+                                    $cat_stmt->execute([$category_name, createSlug($category_name)]);
+                                    $category = $cat_stmt->fetch();
+                                    
+                                    if ($category) {
+                                        $category_id = $category['id'];
+                                    } else if (isset($_POST['create_categories'])) {
+                                        // Create new category
+                                        $cat_slug = createSlug($category_name);
+                                        $cat_stmt = $pdo->prepare("INSERT INTO categories (name, slug) VALUES (?, ?)");
+                                        $cat_stmt->execute([$category_name, $cat_slug]);
+                                        $category_id = $pdo->lastInsertId();
+                                        $import_log[] = "Row $row_number: Created new category: $category_name";
+                                    }
+                                }
+                                
+                                // Prepare data for insert/update
+                                $product_data = [
+                                    'name' => $name,
+                                    'slug' => $slug,
+                                    'description' => $row_data['description'] ?? '',
+                                    'short_description' => $row_data['short_description'] ?? '',
+                                    'price' => (float)$row_data['price'],
+                                    'discount_price' => !empty($row_data['discount_price']) ? (float)$row_data['discount_price'] : null,
+                                    'cost_price' => !empty($row_data['cost_price']) ? (float)$row_data['cost_price'] : null,
+                                    'stock' => (int)($row_data['stock'] ?? 0),
+                                    'sku' => trim($row_data['sku'] ?? ''),
+                                    'upc' => trim($row_data['upc'] ?? ''),
+                                    'ean' => trim($row_data['ean'] ?? ''),
+                                    'brand' => trim($row_data['brand'] ?? ''),
+                                    'model' => trim($row_data['model'] ?? ''),
+                                    'weight' => !empty($row_data['weight']) ? (float)$row_data['weight'] : null,
+                                    'dimensions' => trim($row_data['dimensions'] ?? ''),
+                                    'category_id' => $category_id,
+                                    'status' => $row_data['status'] ?? 'draft',
+                                    'featured' => isset($row_data['featured']) && strtolower($row_data['featured']) === 'yes' ? 1 : 0,
+                                    'is_virtual' => isset($row_data['is_virtual']) && strtolower($row_data['is_virtual']) === 'yes' ? 1 : 0,
+                                    'downloadable' => isset($row_data['downloadable']) && strtolower($row_data['downloadable']) === 'yes' ? 1 : 0,
+                                    'taxable' => isset($row_data['taxable']) && strtolower($row_data['taxable']) === 'no' ? 0 : 1,
+                                    'meta_title' => trim($row_data['meta_title'] ?? ''),
+                                    'meta_description' => trim($row_data['meta_description'] ?? ''),
+                                    'meta_keywords' => trim($row_data['meta_keywords'] ?? '')
+                                ];
+                                
+                                if ($existing && isset($_POST['update_existing'])) {
+                                    // Update existing product
+                                    $sql = "UPDATE products SET 
+                                            name=?, slug=?, description=?, short_description=?, 
+                                            price=?, discount_price=?, cost_price=?, stock=?, sku=?, 
+                                            upc=?, ean=?, brand=?, model=?, weight=?, dimensions=?, 
+                                            category_id=?, status=?, featured=?, is_virtual=?, 
+                                            downloadable=?, taxable=?, meta_title=?, meta_description=?, 
+                                            meta_keywords=?, updated_at=NOW() 
+                                            WHERE id=?";
+                                    
+                                    $params = array_values($product_data);
+                                    $params[] = $existing['id'];
+                                    
+                                    $stmt = $pdo->prepare($sql);
+                                    $stmt->execute($params);
+                                    
+                                    $import_stats['success']++;
+                                    $import_log[] = "Row $row_number: Updated product - " . $name;
+                                } else if (!$existing) {
+                                    // Insert new product
+                                    $sql = "INSERT INTO products (
+                                            name, slug, description, short_description, 
+                                            price, discount_price, cost_price, stock, sku, 
+                                            upc, ean, brand, model, weight, dimensions, 
+                                            category_id, status, featured, is_virtual, 
+                                            downloadable, taxable, meta_title, meta_description, meta_keywords
+                                        ) VALUES (
+                                            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                                        )";
+                                    
+                                    $stmt = $pdo->prepare($sql);
+                                    $stmt->execute(array_values($product_data));
+                                    
+                                    $import_stats['success']++;
+                                    $import_log[] = "Row $row_number: Imported product - " . $name;
+                                }
+                                
+                            } catch (Exception $e) {
+                                $import_stats['failed']++;
+                                $import_errors[] = "Row $row_number: " . $e->getMessage();
+                            }
+                        } else {
+                            $import_stats['failed']++;
+                            $import_errors[] = "Row $row_number: " . implode(', ', $errors);
+                        }
+                    }
+                    
+                    $pdo->commit();
+                    $import_success = "Import completed! Success: {$import_stats['success']}, Failed: {$import_stats['failed']}, Skipped: {$import_stats['skipped']}";
+                    
+                    // Log last import
+                    file_put_contents($import_dir . 'last_import.txt', date('Y-m-d H:i:s'));
+                    file_put_contents($import_dir . 'import_' . date('Y-m-d_H-i-s') . '.log', 
+                        "Import Date: " . date('Y-m-d H:i:s') . "\n" .
+                        "Stats: " . json_encode($import_stats) . "\n" .
+                        "Log: " . implode("\n", $import_log) . "\n" .
+                        "Errors: " . implode("\n", $import_errors)
+                    );
+                    
+                } catch (Exception $e) {
+                    $pdo->rollBack();
+                    $import_errors[] = "Import failed: " . $e->getMessage();
+                }
+            }
+            fclose($handle);
+        } else {
+            $import_errors[] = "Could not open file for reading.";
+        }
+    }
+}
+
+// Handle template download
+if (isset($_GET['download_template'])) {
+    $template_type = $_GET['download_template'];
+    
+    // Set headers for CSV download
+    header('Content-Type: text/csv');
+    header('Content-Disposition: attachment; filename="product_import_template.csv"');
+    
+    // Create output stream
+    $output = fopen('php://output', 'w');
+    
+    // Define columns based on template type
+    if ($template_type === 'basic') {
+        $columns = [
+            'name', 'price', 'description', 'short_description', 'stock', 
+            'sku', 'category', 'brand', 'status', 'featured'
+        ];
+        
+        // Write headers
+        fputcsv($output, $columns);
+        
+        // Write sample data
+        $sample_data = [
+            'Sample Product 1', '25000', 'This is a sample product description',
+            'Short description', '100', 'SKU-001', 'Electronics', 'Samsung', 'active', 'yes'
+        ];
+        fputcsv($output, $sample_data);
+        
+    } else {
+        $columns = [
+            'name', 'price', 'discount_price', 'cost_price', 'description', 
+            'short_description', 'stock', 'sku', 'upc', 'ean', 'brand', 
+            'model', 'weight', 'dimensions', 'category', 'status', 'featured',
+            'is_virtual', 'downloadable', 'taxable', 'meta_title', 
+            'meta_description', 'meta_keywords', 'force_update'
+        ];
+        
+        // Write headers
+        fputcsv($output, $columns);
+        
+        // Write sample data
+        $sample_data = [
+            'Sample Product 1', '25000', '20000', '15000', 'This is a sample product description',
+            'Short desc', '100', 'SKU-001', '123456789', '987654321', 'Sample Brand',
+            'Model X', '1.5', '10x5x2', 'Electronics', 'active', 'yes',
+            'no', 'no', 'yes', 'Sample Product Meta Title',
+            'Meta description here', 'sample, product, test', 'yes'
+        ];
+        fputcsv($output, $sample_data);
+    }
+    
+    fclose($output);
+    exit;
+}
+
+// Handle POST for product add/edit
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['import_products'])) {
     $name = trim($_POST['name'] ?? '');
     $slug = createSlug($name);
     $description = $_POST['description'] ?? '';
@@ -246,7 +534,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!is_dir($upload_dir . 'thumbs/')) mkdir($upload_dir . 'thumbs/', 0755, true);
                 
                 $uploaded_count = 0;
-                $existing_count = 0;
 
                 foreach ($_FILES['images']['tmp_name'] as $key => $tmp_name) {
                     if ($_FILES['images']['error'][$key] === 0) {
@@ -258,15 +545,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             // Create thumbnail
                             copy($dest, $upload_dir . 'thumbs/' . $filename);
                             
-                            $is_main = ($key === 0 && $existing_count === 0) ? 1 : 0;
+                            $is_main = ($key === 0) ? 1 : 0;
                             
                             $imgStmt = $pdo->prepare("
                                 INSERT INTO product_images (product_id, filename, is_main, display_order) 
                                 VALUES (?, ?, ?, ?)
                             ");
                             
-                            $display_order = $existing_count + $uploaded_count + 1;
-                            $imgStmt->execute([$product_id, $filename, $is_main, $display_order]);
+                            $imgStmt->execute([$product_id, $filename, $is_main, $uploaded_count + 1]);
                             $uploaded_count++;
                         }
                     }
@@ -424,25 +710,82 @@ try {
 } catch (Exception $e) {
     $featured_products = 0;
 }
+
+// Get last import date
+$last_import = 'Never';
+try {
+    $import_log_file = '../uploads/imports/last_import.txt';
+    if (file_exists($import_log_file)) {
+        $last_import = date('d/m/Y H:i', filemtime($import_log_file));
+    }
+} catch (Exception $e) {
+    $last_import = 'Never';
+}
+
 require_once 'header.php';
 ?>
 
- 
-
 <div class="admin-main">
     
-    <!-- Page Header -->
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <!-- Page Header with Import Button -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
         <div>
             <h1 style="font-size: 2rem; margin-bottom: 0.5rem; color: var(--admin-dark);">
                 <i class="fas fa-box"></i> Manage Products
             </h1>
-            <p style="color: var(--admin-gray);">Add, edit, and manage your product catalog</p>
+            <p style="color: var(--admin-gray);">Add, edit, import, and manage your product catalog</p>
         </div>
+<!-- Page Header with Import Button -->
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+    <div>
+        <h1 style="font-size: 2rem; margin-bottom: 0.5rem; color: var(--admin-dark);">
+            <i class="fas fa-box"></i> Manage Products
+        </h1>
+        <p style="color: var(--admin-gray);">Add, edit, import, and manage your product catalog</p>
+    </div>
+    <div style="display: flex; gap: 1rem;">
+        <a href="import_products.php" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 0.5rem;">
+            <i class="fas fa-file-import"></i> Import Products CSV
+        </a>
         <a href="?action=add" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 0.5rem;">
             <i class="fas fa-plus"></i> Add New Product
         </a>
+        
+    <a href="import_product_images.php" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 0.5rem;">
+        <i class="fas fa-images"></i> Product Images
+    </a>
+<
     </div>
+</div>
+    </div>
+
+    <!-- Import Messages -->
+    <?php if (!empty($import_success)): ?>
+        <div class="alert alert-success" style="margin-bottom: 1.5rem;">
+            <i class="fas fa-check-circle"></i> <?= htmlspecialchars($import_success) ?>
+            <?php if (!empty($import_log)): ?>
+                <details style="margin-top: 0.5rem;">
+                    <summary>View Import Log</summary>
+                    <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+                        <?php foreach ($import_log as $log): ?>
+                            <li><?= htmlspecialchars($log) ?></li>
+                        <?php endforeach; ?>
+                    </ul>
+                </details>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
+
+    <?php if (!empty($import_errors)): ?>
+        <div class="alert alert-danger" style="margin-bottom: 1.5rem;">
+            <i class="fas fa-exclamation-circle"></i> Import Errors:
+            <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+                <?php foreach ($import_errors as $error): ?>
+                    <li><?= htmlspecialchars($error) ?></li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+    <?php endif; ?>
 
     <!-- Messages -->
     <?php if (!empty($success_msg)): ?>
@@ -570,6 +913,18 @@ require_once 'header.php';
                 </div>
             </div>
         </div>
+        
+        <div class="stat-card">
+            <div class="stat-header">
+                <div>
+                    <div class="stat-value"><?= htmlspecialchars($last_import) ?></div>
+                    <div class="stat-label">Last Import</div>
+                </div>
+                <div class="stat-icon info">
+                    <i class="fas fa-calendar-alt"></i>
+                </div>
+            </div>
+        </div>
     </div>
     <?php endif; ?>
 
@@ -582,7 +937,6 @@ require_once 'header.php';
             </h2>
 
             <form method="post" enctype="multipart/form-data" id="productForm">
-                <input type="hidden" name="action" value="<?= $edit_product ? 'edit' : 'add' ?>">
                 <?php if ($edit_product): ?>
                     <input type="hidden" name="id" value="<?= $edit_product['id'] ?>">
                 <?php endif; ?>
@@ -666,14 +1020,10 @@ require_once 'header.php';
                                   placeholder="Detailed product description" required><?= htmlspecialchars($edit_product['description'] ?? '') ?></textarea>
                     </div>
 
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label class="form-label" style="display: flex; align-items: center; gap: 0.5rem;">
-                                <input type="checkbox" name="featured" value="1" 
-                                       <?= ($edit_product['featured'] ?? 0) ? 'checked' : '' ?>>
-                                Featured Product
-                            </label>
-                        </div>
+                    <div class="form-check">
+                        <input type="checkbox" name="featured" value="1" id="featuredCheck" 
+                               <?= ($edit_product['featured'] ?? 0) ? 'checked' : '' ?>>
+                        <label for="featuredCheck">Featured Product</label>
                     </div>
                 </div>
 
@@ -710,7 +1060,7 @@ require_once 'header.php';
                             <label class="form-label">Stock Quantity</label>
                             <input type="number" name="stock" min="0" 
                                    value="<?= htmlspecialchars($edit_product['stock'] ?? 0) ?>" 
-                                   class="form-control" id="stockInput">
+                                   class="form-control">
                         </div>
 
                         <div class="form-group">
@@ -732,6 +1082,7 @@ require_once 'header.php';
                 <!-- Images Tab -->
                 <div class="tab-content" id="imagesTab" style="display: none;">
                     <div class="form-group">
+                      
                         <label class="form-label">Product Images</label>
                         <input type="file" name="images[]" multiple accept="image/*" class="form-control" id="imageUpload">
                         <small style="color: var(--admin-gray); display: block; margin-top: 0.5rem;">
@@ -739,7 +1090,7 @@ require_once 'header.php';
                         </small>
                         
                         <?php if (!empty($product_images)): ?>
-                            <div id="imagePreview" class="image-gallery" style="margin-top: 1rem;">
+                            <div class="image-gallery">
                                 <?php foreach ($product_images as $img): ?>
                                     <div class="image-item">
                                         <img src="<?= BASE_URL ?>uploads/products/thumbs/<?= htmlspecialchars($img['filename']) ?>" 
@@ -840,8 +1191,7 @@ require_once 'header.php';
                                     <td style="padding: 1rem;">
                                         <?php if (!empty($p['main_image'])): ?>
                                             <img src="<?= BASE_URL ?>uploads/products/thumbs/<?= htmlspecialchars($p['main_image']) ?>" 
-                                                 alt="" class="product-image" 
-                                                 style="width: 50px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--admin-border);">
+                                                 alt="" class="product-image">
                                         <?php else: ?>
                                             <div style="width: 50px; height: 50px; background: var(--admin-light); border-radius: 6px; 
                                                         display: flex; align-items: center; justify-content: center; color: var(--admin-gray);">
@@ -878,8 +1228,8 @@ require_once 'header.php';
                                     </td>
                                     <td style="padding: 1rem; text-align: center;">
                                         <span style="display: inline-block; padding: 0.25rem 0.75rem; border-radius: 999px; font-weight: 600; 
-                                                  background: <?= $p['stock'] > 10 ? 'var(--admin-success)' : ($p['stock'] > 0 ? 'var(--admin-warning)' : 'var(--admin-danger)') ?>20;
-                                                  color: <?= $p['stock'] > 10 ? 'var(--admin-success)' : ($p['stock'] > 0 ? 'var(--admin-warning)' : 'var(--admin-danger)') ?>;">
+                                                  background: <?= $p['stock'] > 10 ? '#10b981' : ($p['stock'] > 0 ? '#f59e0b' : '#ef4444') ?>20;
+                                                  color: <?= $p['stock'] > 10 ? '#10b981' : ($p['stock'] > 0 ? '#f59e0b' : '#ef4444') ?>;">
                                             <?= $p['stock'] ?>
                                         </span>
                                     </td>
@@ -913,7 +1263,7 @@ require_once 'header.php';
 
                 <!-- Pagination -->
                 <?php if ($total_pages > 1): ?>
-                    <div class="pagination" style="margin-top: 2rem;">
+                    <div class="pagination">
                         <?php if ($page > 1): ?>
                             <a href="?page=1<?= !empty($search) ? '&search=' . urlencode($search) : '' ?><?= !empty($category_filter) ? '&category=' . $category_filter : '' ?><?= !empty($status_filter) ? '&status=' . $status_filter : '' ?><?= !empty($stock_filter) ? '&stock=' . $stock_filter : '' ?><?= $featured_filter !== '' ? '&featured=' . $featured_filter : '' ?>" 
                                class="page-link">
@@ -947,6 +1297,97 @@ require_once 'header.php';
             <?php endif; ?>
         </div>
     <?php endif; ?>
+</div>
+
+<!-- Import Modal -->
+<div id="importModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: white; border-radius: 12px; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; padding: 2rem; position: relative;">
+        <button onclick="closeImportModal()" style="position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--admin-gray);">&times;</button>
+        
+        <h2 style="margin-bottom: 1.5rem; color: var(--admin-dark);">
+            <i class="fas fa-file-import"></i> Import Products
+        </h2>
+        
+        <!-- Template Download -->
+        <div style="background: #f8fafc; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
+            <h3 style="font-size: 1rem; margin-bottom: 0.5rem; color: var(--admin-dark);">Download Templates</h3>
+            <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                <a href="?download_template=basic" class="btn btn-secondary" style="flex: 1; text-align: center;">
+                    <i class="fas fa-download"></i> Basic Template
+                </a>
+                <a href="?download_template=full" class="btn btn-secondary" style="flex: 1; text-align: center;">
+                    <i class="fas fa-download"></i> Full Template
+                </a>
+            </div>
+            <p style="margin-top: 0.5rem; font-size: 0.875rem; color: var(--admin-gray);">
+                Download a template, fill in your product data, and upload it here.
+            </p>
+        </div>
+        
+        <!-- Import Form -->
+        <form method="post" enctype="multipart/form-data" id="importForm">
+            <div style="border: 2px dashed var(--admin-border); border-radius: 8px; padding: 2rem; text-align: center; margin-bottom: 1.5rem;" 
+                 ondragover="event.preventDefault()" 
+                 ondrop="handleDrop(event)">
+                
+                <i class="fas fa-cloud-upload-alt" style="font-size: 3rem; color: var(--admin-primary); margin-bottom: 1rem;"></i>
+                
+                <div style="margin-bottom: 1rem;">
+                    <label for="import_file" style="background: var(--admin-primary); color: white; padding: 0.75rem 1.5rem; border-radius: 8px; cursor: pointer; display: inline-block;">
+                        <i class="fas fa-folder-open"></i> Choose File
+                    </label>
+                    <input type="file" name="import_file" id="import_file" accept=".csv,.txt,.xls,.xlsx" style="display: none;" onchange="updateFileName(this)">
+                </div>
+                
+                <p style="color: var(--admin-gray);" id="file_name_display">No file selected</p>
+                <p style="font-size: 0.875rem; color: var(--admin-gray); margin-top: 0.5rem;">
+                    Supported formats: CSV, Excel (.xls, .xlsx)<br>
+                    Max file size: 10MB
+                </p>
+            </div>
+            
+            <!-- Import Options -->
+            <div style="margin-bottom: 1.5rem;">
+                <h3 style="font-size: 1rem; margin-bottom: 0.5rem;">Import Options</h3>
+                
+                <label style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                    <input type="checkbox" name="update_existing" value="1">
+                    <span>Update existing products (based on SKU or name)</span>
+                </label>
+                
+                <label style="display: flex; align-items: center; gap: 0.5rem;">
+                    <input type="checkbox" name="create_categories" value="1" checked>
+                    <span>Auto-create missing categories</span>
+                </label>
+            </div>
+            
+            <!-- Instructions -->
+            <details style="margin-bottom: 1.5rem; border: 1px solid var(--admin-border); border-radius: 8px; padding: 0.5rem;">
+                <summary style="cursor: pointer; color: var(--admin-dark); font-weight: 600;">Import Instructions</summary>
+                <div style="margin-top: 1rem; padding: 1rem; background: #f8fafc; border-radius: 8px;">
+                    <ul style="list-style: disc; padding-left: 1.5rem; line-height: 1.6;">
+                        <li><strong>Required columns:</strong> name, price</li>
+                        <li>First row must contain column headers</li>
+                        <li>Use the templates as a starting point</li>
+                        <li>Set <code>force_update=yes</code> to update existing products</li>
+                        <li>Categories will be created automatically if they don't exist</li>
+                        <li>For featured products, use "yes" or "no" in the featured column</li>
+                        <li>Maximum 1000 products per import (for performance)</li>
+                    </ul>
+                </div>
+            </details>
+            
+            <!-- Form Actions -->
+            <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                <button type="button" onclick="closeImportModal()" class="btn btn-secondary">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button type="submit" name="import_products" class="btn btn-primary" onclick="return validateImportForm()">
+                    <i class="fas fa-upload"></i> Start Import
+                </button>
+            </div>
+        </form>
+    </div>
 </div>
 
 <style>
@@ -1010,6 +1451,19 @@ require_once 'header.php';
 
 .form-control::placeholder {
     color: #9ca3af;
+}
+
+.form-check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 1rem 0;
+}
+
+.form-check input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
 }
 
 /* Buttons */
@@ -1135,6 +1589,11 @@ require_once 'header.php';
     color: white;
 }
 
+.stat-icon.info {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: white;
+}
+
 /* Tabs */
 .tab-btn {
     padding: 0.75rem 1.5rem;
@@ -1245,26 +1704,6 @@ tr:hover {
 
 .image-item:hover .image-actions {
     opacity: 1;
-}
-
-.image-action-btn {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.6);
-    color: white;
-    border: none;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.8rem;
-    transition: all 0.2s;
-}
-
-.image-action-btn:hover {
-    background: rgba(0, 0, 0, 0.8);
-    transform: scale(1.1);
 }
 
 .main-image-badge {
@@ -1400,32 +1839,6 @@ tr:hover {
     flex-shrink: 0;
 }
 
-/* Checkboxes and Radio Buttons */
-input[type="checkbox"],
-input[type="radio"] {
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
-    accent-color: #4f46e5;
-}
-
-/* Select Styling */
-select.form-control {
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 1rem center;
-    background-size: 1.5em;
-    padding-right: 2.5rem;
-}
-
-/* Textarea */
-textarea.form-control {
-    resize: vertical;
-    min-height: 120px;
-    line-height: 1.6;
-}
-
 /* Responsive Design */
 @media (max-width: 1200px) {
     .admin-main {
@@ -1496,88 +1909,6 @@ textarea.form-control {
         gap: 0.25rem;
     }
 }
-
-/* Animation for form elements */
-.form-control,
-.btn,
-.tab-btn,
-.stat-card,
-.page-link,
-.image-item {
-    transition: all 0.2s ease-in-out;
-}
-
-/* Focus states for accessibility */
-.form-control:focus,
-.btn:focus,
-.tab-btn:focus {
-    outline: 2px solid #4f46e5;
-    outline-offset: 2px;
-}
-
-/* Loading state */
-.loading {
-    opacity: 0.6;
-    pointer-events: none;
-    position: relative;
-}
-
-.loading::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 20px;
-    height: 20px;
-    margin: -10px 0 0 -10px;
-    border: 2px solid #e5e7eb;
-    border-top-color: #4f46e5;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
-
-/* Scrollbar Styling */
-::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-}
-
-::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: #a1a1a1;
-}
-
-/* Print Styles */
-@media print {
-    .admin-main {
-        margin: 0;
-        padding: 0;
-    }
-    
-    .card {
-        box-shadow: none;
-        border: 1px solid #000;
-    }
-    
-    .btn,
-    .tab-btn,
-    .pagination {
-        display: none;
-    }
-}
 </style>
 
 <script>
@@ -1636,5 +1967,55 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Import Modal Functions
+function openImportModal() {
+    document.getElementById('importModal').style.display = 'flex';
+}
+
+function closeImportModal() {
+    document.getElementById('importModal').style.display = 'none';
+}
+
+function updateFileName(input) {
+    const display = document.getElementById('file_name_display');
+    if (input.files.length > 0) {
+        display.textContent = input.files[0].name + ' (' + (input.files[0].size / 1024).toFixed(2) + ' KB)';
+    } else {
+        display.textContent = 'No file selected';
+    }
+}
+
+function handleDrop(event) {
+    event.preventDefault();
+    const file = event.dataTransfer.files[0];
+    const input = document.getElementById('import_file');
+    input.files = event.dataTransfer.files;
+    updateFileName(input);
+}
+
+function validateImportForm() {
+    const fileInput = document.getElementById('import_file');
+    if (fileInput.files.length === 0) {
+        alert('Please select a file to import');
+        return false;
+    }
+    
+    const fileSize = fileInput.files[0].size / 1024 / 1024; // in MB
+    if (fileSize > 10) {
+        alert('File size exceeds 10MB limit');
+        return false;
+    }
+    
+    return confirm('Start importing products? This may take a few moments for large files.');
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('importModal');
+    if (event.target === modal) {
+        closeImportModal();
+    }
+}
 </script>
 

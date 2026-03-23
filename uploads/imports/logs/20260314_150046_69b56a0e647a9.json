@@ -1,0 +1,39 @@
+{
+    "import_id": "20260314_150046_69b56a0e647a9",
+    "filename": "MyDataFeeds-Products.csv",
+    "timestamp": "2026-03-14 15:00:46",
+    "results": {
+        "total": 23,
+        "imported": 3,
+        "updated": 20,
+        "skipped": 0,
+        "failed": 0,
+        "details": [
+            "Row 2: Imported new product - Unisex Fleece Sweatshirt | Hanes P160",
+            "Row 3: Updated product - Unisex Fleece Sweatshirt | Hanes P160",
+            "Row 4: Updated product - Unisex Fleece Sweatshirt | Hanes P160",
+            "Row 5: Updated product - Unisex Fleece Sweatshirt | Hanes P160",
+            "Row 6: Updated product - Unisex Fleece Sweatshirt | Hanes P160",
+            "Row 7: Updated product - Unisex Fleece Sweatshirt | Hanes P160",
+            "Row 8: Updated product - Unisex Fleece Sweatshirt | Hanes P160",
+            "Row 9: Updated product - Unisex Fleece Sweatshirt | Hanes P160",
+            "Row 10: Updated product - Unisex Fleece Sweatshirt | Hanes P160",
+            "Row 11: Updated product - Unisex Fleece Sweatshirt | Hanes P160",
+            "Row 12: Updated product - Unisex Fleece Sweatshirt | Hanes P160",
+            "Row 13: Updated product - Unisex Fleece Sweatshirt | Hanes P160",
+            "Row 14: Imported new product - All-Over Print Yoga Leggings",
+            "Row 15: Updated product - All-Over Print Yoga Leggings",
+            "Row 16: Updated product - All-Over Print Yoga Leggings",
+            "Row 17: Updated product - All-Over Print Yoga Leggings",
+            "Row 18: Updated product - All-Over Print Yoga Leggings",
+            "Row 19: Imported new product - All-Over Print Padded Sports Bra",
+            "Row 20: Updated product - All-Over Print Padded Sports Bra",
+            "Row 21: Updated product - All-Over Print Padded Sports Bra",
+            "Row 22: Updated product - All-Over Print Padded Sports Bra",
+            "Row 23: Updated product - All-Over Print Padded Sports Bra",
+            "Row 24: Updated product - All-Over Print Padded Sports Bra"
+        ],
+        "errors": []
+    },
+    "user_id": 1
+}

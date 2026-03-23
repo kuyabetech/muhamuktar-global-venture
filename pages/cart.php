@@ -4,7 +4,7 @@ $page_title = "Shopping Cart";
 require_once '../includes/config.php';
 require_once '../includes/functions.php';
 require_once '../includes/db.php';
-
+require_once '../includes/header.php';
 
 // Start session
 if (session_status() === PHP_SESSION_NONE) {
@@ -21,9 +21,9 @@ $total = 0;
 
 try {
     if ($user_id) {
-        // Logged-in users
+        // Logged-in users - Fixed to prevent duplicates
         $stmt = $pdo->prepare("
-            SELECT 
+            SELECT DISTINCT
                 c.id AS cart_id,
                 c.quantity,
                 c.price AS item_price,
@@ -31,23 +31,23 @@ try {
                 p.id AS product_id,
                 p.name,
                 p.slug,
-                pi.filename,
                 p.stock,
                 p.status,
-                p.price AS current_price
+                p.price AS current_price,
+                (SELECT filename FROM product_images WHERE product_id = p.id AND is_main = 1 LIMIT 1) as filename
             FROM carts c
-            LEFT JOIN products p ON c.product_id = p.id
-            LEFT JOIN product_images pi ON pi.product_id = p.id AND pi.is_main = 1
+            INNER JOIN products p ON c.product_id = p.id
             WHERE c.user_id = ? 
-              AND (c.deleted_at IS NULL OR c.deleted_at = '')
-              AND (p.status = 'active' OR p.status IS NULL)
+              AND (c.deleted_at IS NULL OR c.deleted_at = '0000-00-00 00:00:00')
+              AND p.status = 'active'
+            GROUP BY c.id
             ORDER BY c.created_at DESC
         ");
         $stmt->execute([$user_id]);
     } else {
-        // Guests
+        // Guests - Fixed to prevent duplicates
         $stmt = $pdo->prepare("
-            SELECT 
+            SELECT DISTINCT
                 c.id AS cart_id,
                 c.quantity,
                 c.price AS item_price,
@@ -55,16 +55,16 @@ try {
                 p.id AS product_id,
                 p.name,
                 p.slug,
-                pi.filename,
                 p.stock,
                 p.status,
-                p.price AS current_price
+                p.price AS current_price,
+                (SELECT filename FROM product_images WHERE product_id = p.id AND is_main = 1 LIMIT 1) as filename
             FROM carts c
-            LEFT JOIN products p ON c.product_id = p.id
-            LEFT JOIN product_images pi ON pi.product_id = p.id AND pi.is_main = 1
+            INNER JOIN products p ON c.product_id = p.id
             WHERE c.session_id = ? 
-              AND (c.deleted_at IS NULL OR c.deleted_at = '')
-              AND (p.status = 'active' OR p.status IS NULL)
+              AND (c.deleted_at IS NULL OR c.deleted_at = '0000-00-00 00:00:00')
+              AND p.status = 'active'
+            GROUP BY c.id
             ORDER BY c.created_at DESC
         ");
         $stmt->execute([$session_id]);
@@ -89,7 +89,6 @@ try {
     error_log("Cart error: " . $e->getMessage());
     $error = "Unable to load cart items: " . $e->getMessage();
 }
-require_once '../includes/header.php';
 ?>
 
 <style>
@@ -792,7 +791,7 @@ require_once '../includes/header.php';
                         $stock_icon = 'fa-check-circle';
                     }
                 ?>
-                    <div class="cart-item-card">
+                    <div class="cart-item-card" data-cart-id="<?= $item['cart_id'] ?>">
                         <div class="cart-item-inner">
                             <div class="item-thumbnail">
                                 <?php if ($has_image): ?>
@@ -943,47 +942,216 @@ require_once '../includes/header.php';
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Update quantity function
+    // Show notification function
+    function showNotification(message, type = 'success') {
+        // Remove any existing notifications
+        const existing = document.querySelector('.cart-notification');
+        if (existing) existing.remove();
+        
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = 'cart-notification';
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 1rem 1.5rem;
+            background: ${type === 'success' ? '#10b981' : '#ef4444'};
+            color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 9999;
+            animation: slideIn 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        `;
+        
+        notification.innerHTML = `
+            <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i>
+            <span>${message}</span>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Remove after 3 seconds
+        setTimeout(() => {
+            notification.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 300);
+        }, 3000);
+    }
+    
+    // Update quantity function with better error handling
     async function updateCartQuantity(cartId, quantity) {
+        const cartItem = document.querySelector(`.cart-item-card[data-cart-id="${cartId}"]`);
+        if (cartItem) {
+            cartItem.style.opacity = '0.6';
+        }
+        
         try {
+            const formData = new FormData();
+            formData.append('cart_id', cartId);
+            formData.append('quantity', quantity);
+            
             const response = await fetch('../actions/update_cart.php', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `cart_id=${cartId}&quantity=${quantity}`
+                body: formData
             });
             
-            if (response.ok) {
-                location.reload();
+            // Check if response is JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await response.text();
+                console.error('Non-JSON response:', text.substring(0, 200));
+                throw new Error('Server returned invalid response');
+            }
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                showNotification('Cart updated', 'success');
+                
+                // Update the quantity display
+                const input = document.querySelector(`.quantity-field[data-cart-id="${cartId}"]`);
+                if (input) {
+                    input.value = quantity;
+                    
+                    // Update button states
+                    const decreaseBtn = document.querySelector(`.decrease-btn[data-cart-id="${cartId}"]`);
+                    const increaseBtn = document.querySelector(`.increase-btn[data-cart-id="${cartId}"]`);
+                    
+                    if (decreaseBtn) {
+                        decreaseBtn.disabled = quantity <= 1;
+                    }
+                    if (increaseBtn) {
+                        const maxAllowed = parseInt(input.max);
+                        increaseBtn.disabled = quantity >= maxAllowed;
+                    }
+                }
+                
+                // Reload to update totals
+                setTimeout(() => {
+                    location.reload();
+                }, 1000);
+            } else {
+                throw new Error(data.message || 'Failed to update cart');
             }
         } catch (error) {
             console.error('Error:', error);
-            alert('Failed to update quantity. Please try again.');
+            showNotification(error.message, 'error');
+        } finally {
+            if (cartItem) {
+                cartItem.style.opacity = '1';
+            }
         }
     }
     
-    // Remove item function
+    // Remove item function with better error handling
     async function removeCartItem(cartId) {
         if (!confirm('Are you sure you want to remove this item from your cart?')) {
             return;
         }
         
+        const cartItem = document.querySelector(`.cart-item-card[data-cart-id="${cartId}"]`);
+        if (cartItem) {
+            cartItem.style.transition = 'all 0.3s ease';
+            cartItem.style.opacity = '0.5';
+        }
+        
         try {
+            const formData = new FormData();
+            formData.append('cart_id', cartId);
+            
             const response = await fetch('../actions/remove_cart.php', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `cart_id=${cartId}`
+                body: formData
             });
             
-            if (response.ok) {
-                location.reload();
+            // Check if response is JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await response.text();
+                console.error('Non-JSON response:', text.substring(0, 200));
+                throw new Error('Server returned invalid response');
+            }
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                showNotification('Item removed', 'success');
+                
+                // Animate removal
+                if (cartItem) {
+                    cartItem.style.transform = 'translateX(-20px)';
+                    cartItem.style.opacity = '0';
+                    
+                    setTimeout(() => {
+                        cartItem.remove();
+                        
+                        // Check if cart is now empty
+                        const remainingItems = document.querySelectorAll('.cart-item-card').length;
+                        if (remainingItems === 0) {
+                            location.reload();
+                        } else {
+                            location.reload();
+                        }
+                    }, 300);
+                } else {
+                    location.reload();
+                }
+            } else {
+                throw new Error(data.message || 'Failed to remove item');
             }
         } catch (error) {
             console.error('Error:', error);
-            alert('Failed to remove item. Please try again.');
+            showNotification(error.message, 'error');
+            if (cartItem) {
+                cartItem.style.opacity = '1';
+                cartItem.style.transform = '';
+            }
+        }
+    }
+    
+    // Clear cart function with better error handling
+    async function clearCart() {
+        if (!confirm('Are you sure you want to clear your entire cart? This action cannot be undone.')) {
+            return;
+        }
+        
+        try {
+            const formData = new FormData();
+            
+            const response = await fetch('../actions/clear_cart.php', {
+                method: 'POST',
+                body: formData
+            });
+            
+            // Check if response is JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await response.text();
+                console.error('Non-JSON response:', text.substring(0, 200));
+                throw new Error('Server returned invalid response');
+            }
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                showNotification('Cart cleared', 'success');
+                setTimeout(() => {
+                    location.reload();
+                }, 1000);
+            } else {
+                throw new Error(data.message || 'Failed to clear cart');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            showNotification(error.message, 'error');
         }
     }
     
@@ -1021,15 +1189,12 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Clear cart button
-    document.getElementById('clearCartBtn')?.addEventListener('click', function() {
-        if (confirm('Are you sure you want to clear your entire cart?')) {
-            // You would implement clear cart functionality here
-            alert('Clear cart functionality would be implemented here');
-        }
-    });
+    document.getElementById('clearCartBtn')?.addEventListener('click', clearCart);
     
     // Quantity input direct edit
     document.querySelectorAll('.quantity-field').forEach(input => {
+        let originalValue = input.value;
+        
         input.addEventListener('dblclick', function() {
             this.removeAttribute('readonly');
             this.focus();
@@ -1044,11 +1209,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const max = parseInt(this.max);
             
             if (!isNaN(newQuantity) && newQuantity >= min && newQuantity <= max) {
-                if (newQuantity !== parseInt(this.defaultValue)) {
+                if (newQuantity !== parseInt(originalValue)) {
                     updateCartQuantity(cartId, newQuantity);
                 }
             } else {
-                this.value = this.defaultValue;
+                this.value = originalValue;
             }
         });
         
@@ -1057,7 +1222,47 @@ document.addEventListener('DOMContentLoaded', function() {
                 this.blur();
             }
         });
+        
+        input.addEventListener('focus', function() {
+            originalValue = this.value;
+        });
     });
+    
+    // Add CSS animations
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
+        
+        .cart-item-card {
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+        
+        .quantity-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    `;
+    document.head.appendChild(style);
 });
 </script>
 
